@@ -3,7 +3,7 @@ version: '3.8'
 services:
   app:
     build: .
-    container_name: misinformation_mitigation_app
+    container_name: misinformation_mitigation_api
     ports:
       - "8001:8001"
     volumes:
