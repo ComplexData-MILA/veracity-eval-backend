@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: misinformation_mitigation_app
+    ports:
+      - "8001:8001"
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://will:nordai123@misinformation_mitigation_db/mitigation_misinformation_db
+    depends_on:
+      misinformation_mitigation_db:
+        condition: service_healthy
+    command: ["/app/docker-entrypoint.sh"]
+
+  misinformation_mitigation_db:
+    container_name: misinformation_mitigation_db
+    image: postgres:13
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
+    environment:
+      - POSTGRES_USER=will
+      - POSTGRES_PASSWORD=nordai123
+      - POSTGRES_DB=mitigation_misinformation_db
+    command: 
+      - "postgres"
+      - "-c"
+      - "hba_file=/etc/postgresql/pg_hba.conf"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U will -d mitigation_misinformation_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
