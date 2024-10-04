@@ -11,6 +11,8 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
+
+# revision identifiers, used by Alembic.
 revision: str = "8e30e71f4a2f"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
@@ -23,12 +25,7 @@ def upgrade() -> None:
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("username", sa.String(), nullable=False),
         sa.Column("email", sa.String(), nullable=False),
-        sa.Column(
-            "created_at",
-            sa.TIMESTAMP(),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
+        sa.Column("created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
         sa.Column("last_login", sa.TIMESTAMP(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -39,12 +36,7 @@ def upgrade() -> None:
         sa.Column("user_id", sa.UUID(), nullable=False),
         sa.Column("claim_text", sa.Text(), nullable=False),
         sa.Column("context", sa.Text(), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.TIMESTAMP(),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
+        sa.Column("created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(
             ["user_id"],
             ["users.id"],
@@ -59,12 +51,7 @@ def upgrade() -> None:
         sa.Column("veracity_score", sa.Float(), nullable=False),
         sa.Column("confidence_score", sa.Float(), nullable=False),
         sa.Column("analysis_text", sa.Text(), nullable=False),
-        sa.Column(
-            "created_at",
-            sa.TIMESTAMP(),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
+        sa.Column("created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(
             ["claim_id"],
             ["claims.id"],
@@ -94,12 +81,7 @@ def upgrade() -> None:
         sa.Column("user_id", sa.UUID(), nullable=False),
         sa.Column("rating", sa.Float(), nullable=False),
         sa.Column("comment", sa.Text(), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.TIMESTAMP(),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
+        sa.Column("created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(
             ["analysis_id"],
             ["analysis.id"],
@@ -116,12 +98,7 @@ def upgrade() -> None:
         "conversations",
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("user_id", sa.UUID(), nullable=False),
-        sa.Column(
-            "start_time",
-            sa.TIMESTAMP(),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
+        sa.Column("start_time", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
         sa.Column("end_time", sa.TIMESTAMP(), nullable=True),
         sa.Column("status", sa.String(), server_default="active", nullable=False),
         sa.ForeignKeyConstraint(
@@ -137,9 +114,7 @@ def upgrade() -> None:
         sa.Column("conversation_id", sa.UUID(), nullable=False),
         sa.Column("sender_type", sa.String(), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
-        sa.Column(
-            "timestamp", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False
-        ),
+        sa.Column("timestamp", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
         sa.Column("claim_id", sa.UUID(), nullable=True),
         sa.Column("analysis_id", sa.UUID(), nullable=True),
         sa.ForeignKeyConstraint(
