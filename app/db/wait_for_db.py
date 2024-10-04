@@ -17,9 +17,7 @@ def wait_for_db():
             print("Database is ready!")
             return
         except OperationalError:
-            print(
-                f"Database not ready. Waiting... (Attempt {attempt + 1}/{max_attempts})"
-            )
+            print(f"Database not ready. Waiting... (Attempt {attempt + 1}/{max_attempts})")
             time.sleep(1)
     print("Could not connect to database.")
     exit(1)
