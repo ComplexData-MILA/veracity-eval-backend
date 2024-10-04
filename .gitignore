@@ -3,5 +3,6 @@ __pycache__/
 *.pyc
 .env
 .idea/
+.vscode/
 *.log
 .mypy_cache/
