@@ -25,6 +25,7 @@ def upgrade() -> None:
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("username", sa.String(), nullable=False),
         sa.Column("email", sa.String(), nullable=False),
+        sa.Column("auth0_id", sa.String(), nullable=False),
         sa.Column("created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
         sa.Column("last_login", sa.TIMESTAMP(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
