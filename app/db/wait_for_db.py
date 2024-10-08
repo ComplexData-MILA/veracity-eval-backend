@@ -1,26 +1,23 @@
 import time
-import os
-from sqlalchemy import create_engine
-from sqlalchemy.exc import OperationalError
+import psycopg2
+from app.core.config import settings
 
 
 def wait_for_db():
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
-        raise ValueError("DATABASE_URL environment variable is not set")
+    max_retries = 30
+    retry_interval = 2
 
-    engine = create_engine(db_url)
-    max_attempts = 30
-    for attempt in range(max_attempts):
+    for _ in range(max_retries):
         try:
-            engine.connect()
+            conn = psycopg2.connect(settings.get_database_url)
+            conn.close()
             print("Database is ready!")
             return
-        except OperationalError:
-            print(f"Database not ready. Waiting... (Attempt {attempt + 1}/{max_attempts})")
-            time.sleep(1)
-    print("Could not connect to database.")
-    exit(1)
+        except psycopg2.OperationalError:
+            print("Waiting for database to be ready...")
+            time.sleep(retry_interval)
+
+    raise Exception("Could not connect to the database after multiple retries")
 
 
 if __name__ == "__main__":

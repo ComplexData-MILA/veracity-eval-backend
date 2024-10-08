@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: misinformation-mitigation-api
+  labels:
+    app: misinformation-mitigation-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: misinformation-mitigation-api
+  template:
+    metadata:
+      labels:
+        app: misinformation-mitigation-api
+    spec:
+      serviceAccountName: misinformation-mitigation-api
+      containers:
+      - name: misinformation-mitigation-api
+        image: gcr.io/misinformation-mitigation/misinformation-mitigation-api:latest
+        ports:
+        - containerPort: 8001
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://misinformation_mitigation_user:$(DB_PASSWORD)@127.0.0.1:5432/misinformation_mitigation_db"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: misinfo-db-secrets
+              key: db-password
+      - name: cloud-sql-proxy
+        image: gcr.io/cloudsql-docker/gce-proxy:1.28.0
+        command:
+          - "/cloud_sql_proxy"
+          - "-instances=$(INSTANCE_CONNECTION_NAME)=tcp:5432"
+        env:
+          - name: INSTANCE_CONNECTION_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: misinfo-config
+                key: db_connection_name
+        securityContext:
+          runAsNonRoot: true
+        
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: misinformation-mitigation-api
+  namespace: default
+  annotations:
+    iam.gke.io/gcp-service-account: misinfo-mitigation-api-sa@misinformation-mitigation.iam.gserviceaccount.com
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: misinformation-mitigation-api-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: misinformation-mitigation-api
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8001
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: misinformation-mitigation-api-ingress
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "misinformation-mitigation-api-ip"
+    networking.gke.io/managed-certificates: "misinformation-mitigation-api-cert"
+spec:
+  rules:
+  - host: api.veri-fact.ai
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: misinformation-mitigation-api-service
+            port: 
+              number: 80
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: misinformation-mitigation-api-cert
+spec:
+  domains:
+    - api.veri-fact.ai
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ClusterSecretStore
+metadata:
+  name: gcp-secret-store
+spec:
+  provider:
+    gcpsm:
+      projectID: misinformation-mitigation
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: misinfo-db-secrets
+spec:
+  secretStoreRef:
+    name: gcp-secret-store
+    kind: ClusterSecretStore
+  target:
+    name: misinfo-db-secrets
+  data:
+  - secretKey: db-password
+    remoteRef:
+      key: misinfo-db-password

@@ -9,11 +9,11 @@ services:
     volumes:
       - .:/app
     environment:
-      - DATABASE_URL=postgresql://will:nordai123@misinformation_mitigation_db/mitigation_misinformation_db
+      - DATABASE_URL=${DATABASE_URL:-postgresql://will:nordai123@misinformation_mitigation_db/mitigation_misinformation_db}
     depends_on:
       misinformation_mitigation_db:
         condition: service_healthy
-    command: ["/app/docker-entrypoint.sh"]
+    command: [ "/app/docker-entrypoint.sh" ]
 
   misinformation_mitigation_db:
     container_name: misinformation_mitigation_db
@@ -22,15 +22,15 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
     environment:
-      - POSTGRES_USER=will
-      - POSTGRES_PASSWORD=nordai123
-      - POSTGRES_DB=mitigation_misinformation_db
-    command: 
+      - POSTGRES_USER=${DB_USER:-will}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-nordai123}
+      - POSTGRES_DB=${DB_NAME:-mitigation_misinformation_db}
+    command:
       - "postgres"
       - "-c"
       - "hba_file=/etc/postgresql/pg_hba.conf"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U will -d mitigation_misinformation_db"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-will} -d ${DB_NAME:-mitigation_misinformation_db}" ]
       interval: 5s
       timeout: 5s
       retries: 5
