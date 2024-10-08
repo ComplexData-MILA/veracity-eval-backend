@@ -22,25 +22,37 @@ spec:
         - containerPort: 8001
         env:
         - name: DATABASE_URL
-          value: "postgresql://misinformation_mitigation_user:$(DB_PASSWORD)@127.0.0.1:5432/misinformation_mitigation_db"
+          value: "postgresql://misinformation_mitigation_user:$(DB_PASSWORD)@/misinformation_mitigation_db?host=/cloudsql/misinformation-mitigation:northamerica-northeast1:misinformation-mitigation-db"
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
               name: misinfo-db-secrets
               key: db-password
+        volumeMounts:
+          - name: cloudsql
+            mountPath: /cloudsql
+        # readinessProbe:
+        #   httpGet:
+        #     path: /v1/health
+        #     port: 8001
+        #   initialDelaySeconds: 10
+        #   periodSeconds: 5
       - name: cloud-sql-proxy
-        image: gcr.io/cloudsql-docker/gce-proxy:1.28.0
-        command:
-          - "/cloud_sql_proxy"
-          - "-instances=$(INSTANCE_CONNECTION_NAME)=tcp:5432"
-        env:
-          - name: INSTANCE_CONNECTION_NAME
-            valueFrom:
-              configMapKeyRef:
-                name: misinfo-config
-                key: db_connection_name
+        image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.11.4
+        args:
+          - "--private-ip"
+          - "--structured-logs"
+          - "--unix-socket=/cloudsql"
+          - "misinformation-mitigation:northamerica-northeast1:misinformation-mitigation-db"
+        volumeMounts:
+          - name: cloudsql
+            mountPath: /cloudsql
         securityContext:
           runAsNonRoot: true
+      volumes:
+        - name: cloudsql
+          emptyDir: {}
+      restartPolicy: Always
         
 ---
 apiVersion: v1
@@ -49,7 +61,7 @@ metadata:
   name: misinformation-mitigation-api
   namespace: default
   annotations:
-    iam.gke.io/gcp-service-account: misinfo-mitigation-api-sa@misinformation-mitigation.iam.gserviceaccount.com
+    iam.gke.io/gcp-service-account: misinfo-mitigation-gke-sa@misinformation-mitigation.iam.gserviceaccount.com
 ---
 apiVersion: v1
 kind: Service
