@@ -1,19 +1,22 @@
 name: Deploy Application
 
 on:
+  push:
+    branches:
+      - feat/MMN-4-github-actions
+      # TODO(wgarneau): Change this to main when ready to deploy
   workflow_dispatch:
     inputs:
       environment:
         description: 'Environment to deploy to'
         required: true
-        default: 'production'
+        default: 'Production'
         type: choice
         options:
-        - production
+        - Production
 
 env:
   TF_VERSION: '1.0.0'
-  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
 
 jobs:
   deploy:
@@ -22,12 +25,18 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Setup Google Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
       with:
-        project_id: ${{ env.GCP_PROJECT_ID }}
-        service_account_key: ${{ secrets.GCP_SA_KEY }}
-        export_default_credentials: true
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Setup Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: misinformation-mitigation
+
+    - name: Configure Docker credentials
+      run: gcloud auth configure-docker --quiet
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
@@ -37,25 +46,33 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
-    - name: Configure Docker credentials
-      run: gcloud auth configure-docker
-
     - name: Set environment variables
       run: |
+        echo "ENVIRONMENT=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
         echo "TF_VAR_db_password=${{ secrets.DB_PASSWORD }}" >> $GITHUB_ENV
-        echo "PROJECT_ID=${{ env.GCP_PROJECT_ID }}" >> $GITHUB_ENV
-        echo "REGION=northamerica-northeast1" >> $GITHUB_ENV
+        echo "PROJECT_ID=misinformation-mitigation" >> $GITHUB_ENV
+        echo "ZONE=northamerica-northeast1" >> $GITHUB_ENV
         echo "CLUSTER_NAME=misinformation-mitigation-gke-cluster" >> $GITHUB_ENV
         echo "IMAGE_NAME=misinformation-mitigation-api" >> $GITHUB_ENV
 
     - name: Run deploy script
+      if: github.ref == 'refs/heads/feat/MMN-4-github-actions'
       run: |
+        echo '${{ secrets.GCP_SA_KEY }}' > /tmp/gcp-sa-key.json
+        export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-sa-key.json
+        gcloud auth activate-service-account --key-file=/tmp/gcp-sa-key.json
+        gcloud config set project misinformation-mitigation
         chmod +x ./infrastructure/deploy.sh
         ./infrastructure/deploy.sh
+
       env:
-        ENVIRONMENT: ${{ github.event.inputs.environment }}
+        TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+        PROJECT_ID: misinformation-mitigation
+        ZONE: northamerica-northeast1
+        CLUSTER_NAME: misinformation-mitigation-gke-cluster
+        IMAGE_NAME: misinformation-mitigation-api
 
     - name: Verify deployment
       run: |
-        gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --region ${{ env.REGION }} --project ${{ env.GCP_PROJECT_ID }}
+        gcloud container clusters get-credentials misinformation-mitigation-gke-cluster --zone northamerica-northeast1-a --project misinformation-mitigation
         kubectl rollout status deployment/misinformation-mitigation-api -n misinformation-mitigation

@@ -193,12 +193,16 @@ resource "google_sql_user" "misinformation_mitigation_user" {
 
 # Kubernetes Resources
 resource "kubernetes_namespace" "misinformation_mitigation" {
+
+  depends_on = [google_container_cluster.primary, google_container_node_pool.primary_nodes]
   metadata {
     name = "misinformation-mitigation"
   }
 }
 
 resource "kubernetes_service_account" "workload_identity_sa" {
+  depends_on = [kubernetes_namespace.misinformation_mitigation]
+
   metadata {
     name      = "workload-identity-sa"
     namespace = kubernetes_namespace.misinformation_mitigation.metadata[0].name
@@ -218,6 +222,8 @@ resource "google_service_account_iam_binding" "workload_identity_sa_binding" {
 }
 
 resource "kubernetes_deployment" "misinformation_mitigation_api" {
+  depends_on = [kubernetes_service_account.workload_identity_sa, google_sql_database_instance.misinformation_mitigation_db]
+
   metadata {
     name      = "misinformation-mitigation-api"
     namespace = kubernetes_namespace.misinformation_mitigation.metadata[0].name
@@ -284,6 +290,8 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
 }
 
 resource "kubernetes_service" "misinformation_mitigation_api" {
+  depends_on = [kubernetes_deployment.misinformation_mitigation_api]
+
   metadata {
     name      = "misinformation-mitigation-api"
     namespace = kubernetes_namespace.misinformation_mitigation.metadata[0].name
@@ -316,6 +324,8 @@ resource "google_compute_managed_ssl_certificate" "misinformation_mitigation_cer
 }
 
 resource "kubernetes_ingress_v1" "misinformation_mitigation_ingress" {
+  depends_on = [kubernetes_service.misinformation_mitigation_api]
+
   metadata {
     name      = "misinformation-mitigation-ingress"
     namespace = kubernetes_namespace.misinformation_mitigation.metadata[0].name
@@ -358,6 +368,8 @@ resource "kubernetes_ingress_v1" "misinformation_mitigation_ingress" {
 }
 
 resource "kubernetes_manifest" "managed_certificate" {
+  depends_on = [kubernetes_namespace.misinformation_mitigation]
+
   manifest = {
     apiVersion = "networking.gke.io/v1"
     kind       = "ManagedCertificate"
@@ -424,6 +436,8 @@ resource "google_project_iam_member" "user_project_owner" {
 }
 
 resource "kubernetes_cluster_role_binding" "user_cluster_admin" {
+  depends_on = [google_container_cluster.primary, google_container_node_pool.primary_nodes]
+
   metadata {
     name = "user-cluster-admin"
   }
@@ -440,6 +454,8 @@ resource "kubernetes_cluster_role_binding" "user_cluster_admin" {
 }
 
 resource "kubernetes_role_binding" "user_namespace_admin" {
+  depends_on = [kubernetes_namespace.misinformation_mitigation]
+
   metadata {
     name      = "user-namespace-admin"
     namespace = kubernetes_namespace.misinformation_mitigation.metadata[0].name

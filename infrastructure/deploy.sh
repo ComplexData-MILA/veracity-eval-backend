@@ -1,28 +1,30 @@
 #!/bin/bash
 
-# Stop the script if any command fails
 set -e
 
-# Load environment variables from .env file
-if [ -f .env ]; then
-    export $(cat .env | xargs)
-fi
-
-# Check if required environment variables are set
 if [ -z "$TF_VAR_db_password" ]; then
-    echo "ERROR: TF_VAR_db_password is not set. Please set this environment variable in your .env file."
+    echo "ERROR: TF_VAR_db_password is not set. Please set this environment variable."
     exit 1
 fi
 
-# Configure variables
+if [ -z "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
+    echo "ERROR: GOOGLE_APPLICATION_CREDENTIALS is not set. Please set this environment variable."
+    exit 1
+fi
+
+
+echo "Authenticating with Google Cloud..."
+gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
+
 PROJECT_ID="misinformation-mitigation"
-REGION="northamerica-northeast1"
 CLUSTER_NAME="misinformation-mitigation-gke-cluster"
 IMAGE_NAME="misinformation-mitigation-api"
+ZONE="northamerica-northeast1-a"
 TERRAFORM_DIR="./infrastructure/terraform"
 KUBERNETES_DIR="./infrastructure/kubernetes"
 
-# Function to check if a command is available
+gcloud config set project $PROJECT_ID
+
 check_command() {
     if ! command -v $1 &> /dev/null
     then
@@ -31,20 +33,18 @@ check_command() {
     fi
 }
 
-# Check dependencies
 check_command gcloud
 check_command docker
 check_command terraform
 check_command kubectl
 
-# Enable Docker BuildKit
+gcloud auth configure-docker gcr.io --quiet
+
 export DOCKER_BUILDKIT=1
 
-# Build and push multi-architecture Docker image
 echo "Building and pushing multi-architecture Docker image..."
 IMAGE_TAG=$(git rev-parse --short HEAD)
 
-# Check if the builder already exists
 if docker buildx inspect mybuilder > /dev/null 2>&1; then
     echo "Builder 'mybuilder' already exists. Using it."
     docker buildx use mybuilder
@@ -55,13 +55,11 @@ fi
 
 docker buildx inspect --bootstrap
 
-# Build and push the multi-arch image
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t gcr.io/$PROJECT_ID/$IMAGE_NAME:$IMAGE_TAG \
-  -t gcr.io/$PROJECT_ID/$IMAGE_NAME:latest \
+  -t gcr.io/${PROJECT_ID}/${IMAGE_NAME}:${IMAGE_TAG} \
+  -t gcr.io/${PROJECT_ID}/${IMAGE_NAME}:latest \
   --push .
 
-# Apply Terraform configuration
 echo "Applying Terraform configuration..."
 cd $TERRAFORM_DIR
 terraform init -reconfigure
@@ -71,7 +69,7 @@ DB_CONNECTION_NAME=$(terraform output -raw database_connection_name)
 cd -
 
 echo "Connecting to GKE cluster..."
-gcloud container clusters get-credentials $CLUSTER_NAME --region ${REGION}-a
+gcloud container clusters get-credentials $CLUSTER_NAME --zone $ZONE
 
 kubectl rollout status deployment/misinformation-mitigation-api -n misinformation-mitigation
 
