@@ -37,12 +37,6 @@ check_command docker
 check_command terraform
 check_command kubectl
 
-# Log in to GCP and set up application default credentials
-echo "Logging in to Google Cloud and setting up application default credentials..."
-gcloud auth login
-gcloud auth application-default login
-gcloud config set project $PROJECT_ID
-
 # Enable Docker BuildKit
 export DOCKER_BUILDKIT=1
 
