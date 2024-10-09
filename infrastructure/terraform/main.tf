@@ -323,9 +323,9 @@ resource "kubernetes_ingress_v1" "misinformation_mitigation_ingress" {
       "kubernetes.io/ingress.class"                 = "gce"
       "kubernetes.io/ingress.global-static-ip-name" = google_compute_global_address.misinformation_mitigation_api_ip.name
       "networking.gke.io/managed-certificates"      = "misinformation-mitigation-cert"
-      "kubernetes.io/ingress.allow-http"            = "true"
+      "kubernetes.io/ingress.allow-http"            = "false"
       "ingress.gcp.kubernetes.io/pre-shared-cert"   = google_compute_managed_ssl_certificate.misinformation_mitigation_cert.name
-      #   "kubernetes.io/ingress.force-ssl-redirect"    = "true"
+      "kubernetes.io/ingress.force-ssl-redirect"    = "true"
     }
   }
   spec {

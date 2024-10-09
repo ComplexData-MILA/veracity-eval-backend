@@ -73,24 +73,13 @@ cd $TERRAFORM_DIR
 terraform init -reconfigure
 terraform apply -auto-approve
 
-# Retrieve necessary information from Terraform
 DB_CONNECTION_NAME=$(terraform output -raw database_connection_name)
 cd -
 
-# Connect to GKE cluster
 echo "Connecting to GKE cluster..."
 gcloud container clusters get-credentials $CLUSTER_NAME --region ${REGION}-a
 
-# Update ConfigMap with database information
-echo "Updating ConfigMap..."
-kubectl create configmap misinfo-config --from-literal=db_connection_name=$DB_CONNECTION_NAME -o yaml --dry-run=client | kubectl apply -f -
-
-# Deploy application to GKE
-echo "Deploying application to GKE..."
-kubectl apply -f $KUBERNETES_DIR/deployment.yaml
-
-# Wait for deployment to complete
-kubectl rollout status deployment/misinformation-mitigation-api
+kubectl rollout status deployment/misinformation-mitigation-api -n misinformation-mitigation
 
 echo "Deployment completed successfully!"
 echo "You can access your API via the URL configured in the Ingress."
