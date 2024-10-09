@@ -1,8 +1,10 @@
 venv/
 __pycache__/
 *.pyc
+.env.local
 .env
 .idea/
 .vscode/
 *.log
 .mypy_cache/
+infrastructure/terraform/.terraform
