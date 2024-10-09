@@ -10,7 +10,6 @@ def wait_for_db():
     for attempt in range(max_retries):
         try:
             print(f"Attempt {attempt + 1}/{max_retries} to connect to the database...")
-            print(f"Connection URL: {settings.get_database_url}")
             conn = psycopg2.connect(settings.get_database_url)
             conn.close()
             print("Successfully connected to the database!")
