@@ -69,7 +69,7 @@ DB_CONNECTION_NAME=$(terraform output -raw database_connection_name)
 cd -
 
 echo "Connecting to GKE cluster..."
-gcloud container clusters get-credentials $CLUSTER_NAME --zone $ZONE
+gcloud container clusters get-credentials $CLUSTER_NAME --zone $ZONE --project $PROJECT_ID
 
 kubectl rollout status deployment/misinformation-mitigation-api -n misinformation-mitigation
 

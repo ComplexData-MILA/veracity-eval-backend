@@ -435,6 +435,13 @@ resource "google_project_iam_member" "user_project_owner" {
   member  = "user:wgarneau@veri-fact.ai"
 }
 
+
+resource "google_project_iam_member" "gke-sa-cluster-admin" {
+  project = var.project_id
+  role    = "roles/container.admin"
+  member  = "serviceAccount:${google_service_account.gke_sa.email}"
+}
+
 resource "kubernetes_cluster_role_binding" "user_cluster_admin" {
   depends_on = [google_container_cluster.primary, google_container_node_pool.primary_nodes]
 
@@ -470,6 +477,48 @@ resource "kubernetes_role_binding" "user_namespace_admin" {
     name      = var.user_email
     api_group = "rbac.authorization.k8s.io"
   }
+}
+
+resource "kubernetes_cluster_role_binding" "gke-sa-cluster-admin" {
+  depends_on = [google_container_cluster.primary, google_container_node_pool.primary_nodes]
+
+  metadata {
+    name = "gke-sa-cluster-admin"
+  }
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = "cluster-admin"
+  }
+  subject {
+    kind      = "ServiceAccount"
+    name      = google_service_account.gke_sa.account_id
+    namespace = kubernetes_namespace.misinformation_mitigation.metadata[0].name
+  }
+}
+
+resource "kubernetes_role_binding" "gke_sa_namespace_admin" {
+  depends_on = [kubernetes_namespace.misinformation_mitigation]
+
+  metadata {
+    name      = "gke-sa-namespace-admin"
+    namespace = kubernetes_namespace.misinformation_mitigation.metadata[0].name
+  }
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = "admin"
+  }
+  subject {
+    kind      = "ServiceAccount"
+    name      = google_service_account.gke_sa.account_id
+    namespace = kubernetes_namespace.misinformation_mitigation.metadata[0].name
+  }
+}
+
+variable "service_account_email" {
+  description = "Email of the service account to grant permissions"
+  default     = "misinfo-mitigation-gke-sa"
 }
 
 variable "user_email" {

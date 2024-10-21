@@ -17,6 +17,10 @@ on:
 
 env:
   TF_VERSION: '1.0.0'
+  PROJECT_ID: misinformation-mitigation
+  ZONE: northamerica-northeast1-a
+  CLUSTER_NAME: misinformation-mitigation-gke-cluster
+  IMAGE_NAME: misinformation-mitigation-api
 
 jobs:
   deploy:
@@ -33,16 +37,16 @@ jobs:
     - name: Setup Google Cloud SDK
       uses: google-github-actions/setup-gcloud@v2
       with:
-        project_id: misinformation-mitigation
+        project_id: ${{ env.PROJECT_ID }}
 
     - name: Configure Docker credentials
       run: gcloud auth configure-docker --quiet
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v2
-      with:
-        terraform_version: ${{ env.TF_VERSION }}
-
+    - name: Configure kubectl
+      run: |
+        gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.ZONE }} --project ${{ env.PROJECT_ID }}
+        kubectl config view
+        
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
@@ -50,10 +54,11 @@ jobs:
       run: |
         echo "ENVIRONMENT=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
         echo "TF_VAR_db_password=${{ secrets.DB_PASSWORD }}" >> $GITHUB_ENV
-        echo "PROJECT_ID=misinformation-mitigation" >> $GITHUB_ENV
-        echo "ZONE=northamerica-northeast1" >> $GITHUB_ENV
-        echo "CLUSTER_NAME=misinformation-mitigation-gke-cluster" >> $GITHUB_ENV
-        echo "IMAGE_NAME=misinformation-mitigation-api" >> $GITHUB_ENV
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
 
     - name: Run deploy script
       if: github.ref == 'refs/heads/feat/MMN-4-github-actions'
