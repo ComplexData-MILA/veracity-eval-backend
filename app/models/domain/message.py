@@ -11,11 +11,13 @@ class Message:
         sender_type: str,
         content: str,
         timestamp: datetime,
+        claim_conversation_id: Optional[UUID] = None,
         claim_id: Optional[UUID] = None,
         analysis_id: Optional[UUID] = None,
     ):
         self.id = id
         self.conversation_id = conversation_id
+        self.claim_conversation_id = claim_conversation_id
         self.sender_type = sender_type
         self.content = content
         self.timestamp = timestamp

@@ -18,6 +18,8 @@ services:
   misinformation_mitigation_db:
     container_name: misinformation_mitigation_db
     image: postgres:13
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
@@ -25,6 +27,7 @@ services:
       - POSTGRES_USER=${DB_USER:-will}
       - POSTGRES_PASSWORD=${DB_PASSWORD:-nordai123}
       - POSTGRES_DB=${DB_NAME:-mitigation_misinformation_db}
+      - POSTGRES_PORT=${DB_PORT:-5432}
     command:
       - "postgres"
       - "-c"

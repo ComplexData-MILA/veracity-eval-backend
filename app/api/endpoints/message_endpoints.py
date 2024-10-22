@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from uuid import UUID
-from typing import List
+from typing import List, Optional
 from app.schemas.message_schema import MessageCreate, MessageRead
 from app.services.message_service import MessageService
 
@@ -22,6 +22,12 @@ async def get_message(message_id: UUID, service: MessageService = Depends()):
 
 
 @router.get("/conversation/{conversation_id}", response_model=List[MessageRead])
-async def get_messages_by_conversation(conversation_id: UUID, service: MessageService = Depends()):
-    messages = service.get_messages_by_conversation(conversation_id)
+async def get_messages_by_conversation(
+    conversation_id: UUID, claim_conversation_id: Optional[UUID] = None, service: MessageService = Depends()
+):
+    """
+    Get messages for a conversation. If claim_conversation_id is provided,
+    returns only messages for that specific claim conversation.
+    """
+    messages = service.get_messages_by_conversation(conversation_id, claim_conversation_id)
     return [MessageRead.model_validate(message) for message in messages]

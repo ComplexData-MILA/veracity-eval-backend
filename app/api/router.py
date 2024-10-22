@@ -9,6 +9,7 @@ from app.api.endpoints import (
     message_endpoints,
     domain_endpoints,
     health_endpoints,
+    claim_conversation_endpoints,
 )
 
 router = APIRouter()
@@ -21,4 +22,5 @@ router.include_router(feedback_endpoints.router, prefix="/feedback", tags=["feed
 router.include_router(conversation_endpoints.router, prefix="/conversations", tags=["conversations"])
 router.include_router(message_endpoints.router, prefix="/messages", tags=["messages"])
 router.include_router(domain_endpoints.router, prefix="/domains", tags=["domains"])
+router.include_router(claim_conversation_endpoints.router, prefix="/claim-conversations", tags=["claim-conversations"])
 router.include_router(health_endpoints.router, tags=["health"])

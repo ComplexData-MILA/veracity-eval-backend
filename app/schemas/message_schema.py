@@ -8,6 +8,7 @@ class MessageCreate(BaseModel):
     conversation_id: UUID
     sender_type: str
     content: str
+    claim_conversation_id: Optional[UUID] = None
     claim_id: Optional[UUID] = None
     analysis_id: Optional[UUID] = None
 
@@ -18,6 +19,7 @@ class MessageRead(BaseModel):
     sender_type: str
     content: str
     timestamp: datetime
+    claim_conversation_id: Optional[UUID] = None
     claim_id: Optional[UUID] = None
     analysis_id: Optional[UUID] = None
 
