@@ -17,8 +17,6 @@ from app.repositories.implementations.conversation_repository import Conversatio
 
 
 class AnalysisState:
-    """Value object to track analysis state"""
-
     def __init__(self):
         self.current_claim: Optional[Claim] = None
         self.current_analysis: Optional[Analysis] = None

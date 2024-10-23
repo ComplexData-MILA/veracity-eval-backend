@@ -1,30 +1,46 @@
-from uuid import UUID
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import List, Optional
+from uuid import UUID, uuid4
+
+from app.models.database.conversation import ConversationStatus
 from app.models.domain.conversation import Conversation
-from app.models.domain.claim_conversation import ClaimConversation
-from app.schemas.conversation_schema import ConversationCreate
-from app.schemas.claim_conversation_schema import ClaimConversationCreate
+from app.repositories.implementations.conversation_repository import ConversationRepository
+from app.repositories.implementations.claim_conversation_repository import ClaimConversationRepository
+from app.core.exceptions import NotFoundException, NotAuthorizedException
 
 
 class ConversationService:
-    def create_conversation(self, conversation_create: ConversationCreate) -> Conversation:
-        return Conversation(id=UUID.uuid4(), user_id=conversation_create.user_id, start_time=datetime.now())
+    def __init__(
+        self,
+        conversation_repository: ConversationRepository,
+        claim_conversation_repository: ClaimConversationRepository,
+    ):
+        self._conversation_repo = conversation_repository
+        self._claim_conversation_repo = claim_conversation_repository
 
-    def get_conversation(self, conversation_id: UUID) -> Optional[Conversation]:
-        # In a real implementation, this would fetch from a database
-        pass
+    async def create_conversation(self, user_id: UUID, metadata: Optional[dict] = None) -> Conversation:
+        conversation = Conversation(
+            id=uuid4(),
+            user_id=user_id,
+            start_time=datetime.now(UTC),
+            status=ConversationStatus.ACTIVE.value,
+            metadata=metadata or {},
+        )
+        return await self._conversation_repo.create(conversation)
 
-    def add_claim_conversation(
-        self, conversation_id: UUID, claim_conversation_create: ClaimConversationCreate
-    ) -> ClaimConversation:
-        # This would:
-        # 1. Verify the conversation exists
-        # 2. Create a new claim_conversation
-        # 3. Link it to the conversation
-        # 4. Return the new claim_conversation
-        pass
+    async def get_conversation(self, conversation_id: UUID, user_id: UUID) -> Conversation:
+        conversation = await self._conversation_repo.get(conversation_id)
+        if not conversation:
+            raise NotFoundException("Conversation not found")
+        if conversation.user_id != user_id:
+            raise NotAuthorizedException("Not authorized to access this conversation")
+        return conversation
 
-    def get_claim_conversations(self, conversation_id: UUID) -> List[ClaimConversation]:
-        # Get all claim conversations for a given conversation
-        pass
+    async def list_user_conversations(
+        self, user_id: UUID, status: Optional[ConversationStatus] = None, limit: int = 50, offset: int = 0
+    ) -> List[Conversation]:
+        conversations = await self._conversation_repo.get_user_conversations(
+            user_id=user_id, status=status.value if status else None, limit=limit, offset=offset
+        )
+
+        return conversations

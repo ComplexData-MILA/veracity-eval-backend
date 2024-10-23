@@ -41,12 +41,12 @@ class Base(AsyncAttrs, DeclarativeBase):
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow, nullable=False, doc="Timestamp when the record was created"
+        default=datetime.now(UTC), nullable=False, doc="Timestamp when the record was created"
     )
 
     updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=datetime.now(UTC),
+        onupdate=datetime.now(UTC),
         nullable=False,
         doc="Timestamp when the record was last updated",
     )
@@ -67,18 +67,3 @@ class Base(AsyncAttrs, DeclarativeBase):
         """String representation of the model."""
         values = ", ".join(f"{column.name}={getattr(self, column.name)!r}" for column in self.__table__.columns)
         return f"{self.__class__.__name__}({values})"
-
-
-class TimestampMixin:
-    """Mixin to add timestamp fields."""
-
-    created_at: Mapped[datetime] = mapped_column(
-        default=datetime.now(UTC), nullable=False, doc="Timestamp when the record was created"
-    )
-
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.now(UTC),
-        onupdate=datetime.now(UTC),
-        nullable=False,
-        doc="Timestamp when the record was last updated",
-    )

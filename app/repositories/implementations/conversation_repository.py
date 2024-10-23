@@ -3,8 +3,8 @@ from uuid import UUID
 from datetime import datetime
 from sqlalchemy import select, and_, desc
 
+from app.models.database.conversation import ConversationModel, ConversationStatus
 from app.models.domain.conversation import Conversation
-from app.models.database.models.conversation import ConversationModel, ConversationStatus
 from app.repositories.base import BaseRepository
 from app.repositories.interfaces.conversation_repository import (
     ConversationRepositoryInterface,

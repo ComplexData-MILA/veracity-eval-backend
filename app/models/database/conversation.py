@@ -1,13 +1,14 @@
 from datetime import UTC, datetime
 from typing import List, Optional
+import uuid
 from sqlalchemy import ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 import enum
 
-from app.models.database.base import Base, TimestampMixin
-from app.models.database.models import ClaimConversationModel
-from app.models.database.models.user import UserModel
+from app.models.database.base import Base
+from app.models.database.claim_conversation import ClaimConversationModel
+from app.models.database.user import UserModel
 
 
 class ConversationStatus(str, enum.Enum):
@@ -17,9 +18,10 @@ class ConversationStatus(str, enum.Enum):
     ARCHIVED = "archived"
 
 
-class ConversationModel(Base, TimestampMixin):
+class ConversationModel(Base):
     __tablename__ = "conversations"
 
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     start_time: Mapped[datetime] = mapped_column(default=datetime.now(UTC), nullable=False)
     end_time: Mapped[Optional[datetime]] = mapped_column(nullable=True)
@@ -33,9 +35,3 @@ class ConversationModel(Base, TimestampMixin):
     claim_conversations: Mapped[List["ClaimConversationModel"]] = relationship(
         back_populates="conversation", cascade="all, delete-orphan"
     )
-
-    def __repr__(self) -> str:
-        return (
-            f"Conversation(id={self.id}, user_id={self.user_id}, "
-            f"status={self.status}, start_time={self.start_time})"
-        )
