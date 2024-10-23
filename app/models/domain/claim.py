@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from app.models.database.claim import ClaimModel, ClaimStatus
+from app.models.database.models import ClaimModel, ClaimStatus
 
 
 @dataclass

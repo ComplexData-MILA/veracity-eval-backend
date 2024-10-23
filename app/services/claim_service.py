@@ -2,7 +2,7 @@ from datetime import datetime, UTC
 from typing import List, Optional, Tuple
 from uuid import UUID, uuid4
 
-from app.models.database.claim import ClaimStatus
+from app.models.database.models import ClaimStatus
 from app.models.domain.claim import Claim
 from app.repositories.implementations.claim_repository import ClaimRepository
 from app.core.exceptions import NotFoundException, NotAuthorizedException

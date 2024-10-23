@@ -3,17 +3,26 @@ from datetime import datetime
 from uuid import UUID
 
 
-class UserCreate(BaseModel):
-    username: str
+class UserBase(BaseModel):
+    """Base Pydantic model for users."""
+
     email: EmailStr
+    username: str
+    is_active: bool = True
 
 
-class UserRead(BaseModel):
+class UserCreate(UserBase):
+    """Schema for user creation - includes auth0_id."""
+
+    auth0_id: str
+
+
+class UserRead(UserBase):
+    """Schema for reading user data - includes additional fields."""
+
     id: UUID
-    username: str
-    email: EmailStr
     auth0_id: str
     created_at: datetime
-    last_login: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

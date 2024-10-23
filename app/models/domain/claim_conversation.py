@@ -3,8 +3,7 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 
-from app.models.database.claim_conversation import ClaimConversationModel
-from app.models.database.conversation import ConversationStatus
+from app.models.database.models import ClaimConversationModel, ConversationStatus
 
 
 @dataclass

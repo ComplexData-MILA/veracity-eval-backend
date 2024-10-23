@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from app.models.database.domain import DomainModel
+from app.models.database.models import DomainModel
 
 
 @dataclass

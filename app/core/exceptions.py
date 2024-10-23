@@ -15,6 +15,12 @@ class NotAuthorizedException(Exception):
     pass
 
 
+class ValidationError(Exception):
+    """Raised when a user provides invalid data."""
+
+    pass
+
+
 """
 User exceptions
 """
@@ -22,6 +28,12 @@ User exceptions
 
 class UserAlreadyExistsError(Exception):
     """Raised when attempting to create a user that already exists."""
+
+    pass
+
+
+class DuplicateUserError(Exception):
+    """Raised when a user already exists in the database."""
 
     pass
 

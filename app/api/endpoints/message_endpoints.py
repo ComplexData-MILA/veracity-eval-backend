@@ -3,6 +3,7 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
 
+from app.api.dependencies import get_message_service
 from app.models.domain.user import User
 from app.schemas.message_schema import MessageCreate, MessageRead
 from app.services.message_service import MessageService
@@ -15,7 +16,7 @@ router = APIRouter(prefix="/messages", tags=["messages"])
 async def create_message(
     data: MessageCreate,
     # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    message_service: MessageService = Depends(),
+    message_service: MessageService = Depends(get_message_service),
 ):
     """Create a new message in a conversation."""
     # fake user for now
@@ -41,7 +42,7 @@ async def get_conversation_messages(
     before: Optional[datetime] = None,
     limit: int = Query(50, ge=1, le=100),
     # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    message_service: MessageService = Depends(),
+    message_service: MessageService = Depends(get_message_service),
 ):
     """Get messages from a conversation with pagination."""
     # fake user for now
@@ -65,7 +66,7 @@ async def get_claim_conversation_messages(
     before: Optional[datetime] = None,
     limit: int = Query(50, ge=1, le=100),
     # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    message_service: MessageService = Depends(),
+    message_service: MessageService = Depends(get_message_service),
 ):
     """Get messages from a claim conversation with pagination."""
     # fake user for now

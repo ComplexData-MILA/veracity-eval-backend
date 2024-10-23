@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, List, Tuple
 from uuid import UUID
-from app.models.database.claim import ClaimStatus
+from app.models.database.models import ClaimStatus
 from app.models.domain.claim import Claim
 
 

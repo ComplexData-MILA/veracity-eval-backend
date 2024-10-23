@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from app.models.database.message import MessageModel, MessageSenderType
+from app.models.database.models import MessageModel, MessageSenderType
 
 
 @dataclass

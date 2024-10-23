@@ -3,7 +3,7 @@ from typing import Optional, Dict
 from dataclasses import dataclass
 from uuid import UUID
 
-from app.models.database.conversation import ConversationModel, ConversationStatus
+from app.models.database.models import ConversationModel, ConversationStatus
 
 
 @dataclass

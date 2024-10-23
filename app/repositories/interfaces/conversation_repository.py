@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, List
 from uuid import UUID
-from app.models.database.conversation import ConversationStatus
+from app.models.database.models import ConversationStatus
 from app.models.domain.conversation import Conversation
 
 

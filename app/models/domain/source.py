@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from app.models.database.source import SourceModel
+from app.models.database.models import SourceModel
 
 
 @dataclass

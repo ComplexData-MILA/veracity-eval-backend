@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from uuid import UUID
 
+from app.api.dependencies import get_feedback_service
 from app.models.domain.user import User
 from app.schemas.feedback_schema import FeedbackCreate, FeedbackList, FeedbackRead, FeedbackUpdate
 from app.services.feedback_service import FeedbackService
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
 async def create_feedback(
     data: FeedbackCreate,
     # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    feedback_service: FeedbackService = Depends(),
+    feedback_service: FeedbackService = Depends(get_feedback_service),
 ):
     """Create new feedback for an analysis."""
     # fake user for now
@@ -40,7 +41,7 @@ async def get_analysis_feedback(
     analysis_id: UUID,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    feedback_service: FeedbackService = Depends(),
+    feedback_service: FeedbackService = Depends(get_feedback_service),
 ):
     """Get all feedback for an analysis."""
     feedback_list, total = await feedback_service.get_analysis_feedback(
@@ -56,7 +57,7 @@ async def get_user_feedback(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    feedback_service: FeedbackService = Depends(),
+    feedback_service: FeedbackService = Depends(get_feedback_service),
 ):
     """Get all feedback from the current user."""
     # fake user for now
@@ -72,7 +73,7 @@ async def update_feedback(
     feedback_id: UUID,
     update_data: FeedbackUpdate,
     # current_data: tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    feedback_service: FeedbackService = Depends(),
+    feedback_service: FeedbackService = Depends(get_feedback_service),
 ) -> FeedbackRead:
     """
     Update existing feedback.

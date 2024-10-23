@@ -2,7 +2,7 @@ from datetime import datetime, UTC
 from typing import List, Tuple
 from uuid import UUID, uuid4
 
-from app.models.database.analysis import AnalysisStatus
+from app.models.database.models import AnalysisStatus
 from app.models.domain.analysis import Analysis
 from app.repositories.implementations.analysis_repository import AnalysisRepository
 from app.repositories.implementations.claim_repository import ClaimRepository

@@ -2,7 +2,7 @@ from typing import List, Tuple
 from uuid import UUID, uuid4
 from datetime import UTC, datetime
 from app.core.exceptions import NotAuthorizedException, NotFoundException
-from app.models.database.conversation import ConversationStatus
+from app.models.database.models import ConversationStatus
 from app.models.domain.claim_conversation import ClaimConversation
 from app.models.domain.conversation import Conversation
 from app.repositories.implementations.claim_conversation_repository import ClaimConversationRepository

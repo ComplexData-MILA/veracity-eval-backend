@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import List
 from uuid import UUID
 
+from app.api.dependencies import get_source_service
 from app.services.source_service import SourceService
 from app.schemas.source_schema import SourceRead, SourceList
 from app.core.exceptions import NotFoundException
@@ -14,7 +15,7 @@ async def get_source(
     source_id: UUID,
     include_content: bool = Query(False, description="Include full source content in response"),
     # current_data: tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    source_service: SourceService = Depends(),
+    source_service: SourceService = Depends(get_source_service),
 ) -> SourceRead:
     """
     Get detailed information about a specific source.
@@ -31,7 +32,7 @@ async def get_analysis_sources(
     analysis_id: UUID,
     include_content: bool = Query(False, description="Include full source content in response"),
     # current_data: tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    source_service: SourceService = Depends(),
+    source_service: SourceService = Depends(get_source_service),
 ) -> List[SourceRead]:
     """
     Get all sources used in a specific analysis.
@@ -49,7 +50,7 @@ async def get_domain_sources(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     # current_data: tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    source_service: SourceService = Depends(),
+    source_service: SourceService = Depends(get_source_service),
 ) -> SourceList:
     """
     Get all sources from a specific domain.

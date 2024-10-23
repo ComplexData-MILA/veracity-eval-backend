@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import List
 from uuid import UUID
 
+from app.api.dependencies import get_analysis_service
 from app.models.domain.user import User
 from app.services.analysis_service import AnalysisService
 from app.services.analysis_orchestrator import AnalysisOrchestrator
@@ -18,7 +19,7 @@ async def get_analysis(
     analysis_id: UUID,
     include_sources: bool = Query(False),
     include_feedback: bool = Query(False),
-    analysis_service: AnalysisService = Depends(),
+    analysis_service: AnalysisService = Depends(get_analysis_service),
 ) -> AnalysisRead:
     """
     Get a completed analysis by ID.
@@ -40,7 +41,7 @@ async def get_analysis(
 async def stream_claim_analysis(
     claim_id: UUID,
     # current_data: tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    analysis_orchestrator: AnalysisOrchestrator = Depends(),
+    analysis_orchestrator: AnalysisOrchestrator = Depends(get_analysis_service),
 ) -> StreamingResponse:
     """
     Stream the analysis process for a claim in real-time.
@@ -72,7 +73,7 @@ async def get_claim_analyses(
     include_sources: bool = Query(False),
     include_feedback: bool = Query(False),
     # current_data: tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    analysis_service: AnalysisService = Depends(),
+    analysis_service: AnalysisService = Depends(get_analysis_service),
 ) -> List[AnalysisRead]:
     """
     Get all analyses for a claim.
@@ -91,7 +92,7 @@ async def get_latest_claim_analysis(
     include_sources: bool = Query(False),
     include_feedback: bool = Query(False),
     # current_data: tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    analysis_service: AnalysisService = Depends(),
+    analysis_service: AnalysisService = Depends(get_analysis_service),
 ) -> AnalysisRead:
     """
     Get the most recent analysis for a claim.
@@ -108,7 +109,7 @@ async def get_latest_claim_analysis(
 async def reanalyze_claim(
     claim_id: UUID,
     # current_data: tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    analysis_orchestrator: AnalysisOrchestrator = Depends(),
+    analysis_orchestrator: AnalysisOrchestrator = Depends(get_analysis_service),
 ) -> StreamingResponse:
     """
     Request a new analysis for an existing claim.
@@ -136,7 +137,7 @@ async def get_recent_analyses(
     offset: int = Query(0, ge=0),
     include_sources: bool = Query(False),
     # current_data: tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    analysis_service: AnalysisService = Depends(),
+    analysis_service: AnalysisService = Depends(get_analysis_service),
 ) -> AnalysisList:
     """
     Get recent analyses with pagination.

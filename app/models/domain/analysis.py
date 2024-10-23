@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 
-from app.models.database.analysis import AnalysisModel, AnalysisStatus
+from app.models.database.models import AnalysisModel, AnalysisStatus
 from app.models.domain.feedback import Feedback
 from app.models.domain.source import Source
 

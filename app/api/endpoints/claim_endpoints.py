@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import Optional
 from uuid import UUID
 
-from app.models.database.claim import ClaimStatus
+from app.api.dependencies import get_claim_service
+from app.models.database.models import ClaimStatus
 from app.models.domain.user import User
 from app.schemas.claim_schema import ClaimCreate, ClaimList, ClaimRead, ClaimStatusUpdate
 from app.services.claim_service import ClaimService
@@ -15,7 +16,7 @@ router = APIRouter(prefix="/claims", tags=["claims"])
 async def create_claim(
     data: ClaimCreate,
     # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    claim_service: ClaimService = Depends(),
+    claim_service: ClaimService = Depends(get_claim_service),
 ):
     """Create a new claim for the authenticated user."""
     # fake user for now
@@ -31,7 +32,7 @@ async def list_claims(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    claim_service: ClaimService = Depends(),
+    claim_service: ClaimService = Depends(get_claim_service),
 ):
     """List claims for the authenticated user with pagination."""
     # fake user for now
@@ -45,7 +46,7 @@ async def list_claims(
 async def get_claim(
     claim_id: UUID,
     # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    claim_service: ClaimService = Depends(),
+    claim_service: ClaimService = Depends(get_claim_service),
 ):
     """Get a specific claim by ID."""
     # fake user for now
@@ -63,7 +64,7 @@ async def update_claim_status(
     claim_id: UUID,
     data: ClaimStatusUpdate,
     # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    claim_service: ClaimService = Depends(),
+    claim_service: ClaimService = Depends(get_claim_service),
 ):
     """Update a claim's status."""
     # fake user for now

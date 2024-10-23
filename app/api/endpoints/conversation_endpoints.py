@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import Optional
 from uuid import UUID
 
-from app.models.database.conversation import ConversationStatus
+from app.api.dependencies import get_conversation_service
+from app.models.database.models import ConversationStatus
 from app.models.domain.user import User
 from app.services.conversation_service import ConversationService
 from app.schemas.conversation_schema import (
@@ -24,7 +25,7 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 async def create_conversation(
     data: ConversationCreate,
     # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    conversation_service: ConversationService = Depends(),
+    conversation_service: ConversationService = Depends(get_conversation_service),
 ):
     # fake user for now
     user = User(id=UUID("00000000-0000-0000-0000-000000000000"), email="bob@test.com")
@@ -38,7 +39,7 @@ async def list_conversations(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    conversation_service: ConversationService = Depends(),
+    conversation_service: ConversationService = Depends(get_conversation_service),
 ):
     # fake user for now
     user = User(id=UUID("00000000-0000-0000-0000-000000000000"), email="bob@test.com")
@@ -54,7 +55,7 @@ async def list_conversations(
 async def get_conversation(
     conversation_id: UUID,
     # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    conversation_service: ConversationService = Depends(),
+    conversation_service: ConversationService = Depends(get_conversation_service),
 ):
     # fake user for now
     user = User(id=UUID("00000000-0000-0000-0000-000000000000"), email="bob@test.com")
@@ -70,7 +71,7 @@ async def update_conversation(
     conversation_id: UUID,
     data: ConversationUpdate,
     # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    conversation_service: ConversationService = Depends(),
+    conversation_service: ConversationService = Depends(get_conversation_service),
 ):
     # fake user for now
     user = User(id=UUID("00000000-0000-0000-0000-000000000000"), email="bob@test.com")

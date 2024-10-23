@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from uuid import UUID
+from app.api.dependencies import get_domain_service
 from app.services.domain_service import DomainService
 from app.schemas.domain_schema import DomainCreate, DomainUpdate, DomainRead
 from app.core.utils.url import normalize_domain_name, is_valid_domain
@@ -14,7 +15,9 @@ router = APIRouter(prefix="/domains", tags=["domains"])
     status_code=status.HTTP_201_CREATED,
     summary="Create new domain",
 )
-async def create_domain(domain: DomainCreate, domain_service: DomainService = Depends()) -> DomainRead:
+async def create_domain(
+    domain: DomainCreate, domain_service: DomainService = Depends(get_domain_service)
+) -> DomainRead:
     try:
         if not is_valid_domain(domain.domain_name):
             raise ValidationError("Invalid domain name format")
@@ -32,7 +35,9 @@ async def create_domain(domain: DomainCreate, domain_service: DomainService = De
 
 @router.get("/lookup/{domain_name}", response_model=DomainRead, summary="Lookup domain by name")
 async def lookup_domain(
-    domain_name: str, create_if_missing: bool = Query(False), domain_service: DomainService = Depends()
+    domain_name: str,
+    create_if_missing: bool = Query(False),
+    domain_service: DomainService = Depends(get_domain_service),
 ) -> DomainRead:
     try:
         normalized_name = normalize_domain_name(domain_name)
@@ -52,7 +57,7 @@ async def lookup_domain(
 
 
 @router.get("/{domain_id}", response_model=DomainRead, summary="Get domain by ID")
-async def get_domain(domain_id: UUID, domain_service: DomainService = Depends()) -> DomainRead:
+async def get_domain(domain_id: UUID, domain_service: DomainService = Depends(get_domain_service)) -> DomainRead:
     try:
         domain = await domain_service.get_domain(domain_id)
         return DomainRead.model_validate(domain)
@@ -62,7 +67,7 @@ async def get_domain(domain_id: UUID, domain_service: DomainService = Depends())
 
 @router.patch("/{domain_id}", response_model=DomainRead, summary="Update domain")
 async def update_domain(
-    domain_id: UUID, update_data: DomainUpdate, domain_service: DomainService = Depends()
+    domain_id: UUID, update_data: DomainUpdate, domain_service: DomainService = Depends(get_domain_service)
 ) -> DomainRead:
     try:
         domain = await domain_service.update_domain(

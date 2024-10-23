@@ -2,7 +2,7 @@ from datetime import datetime, UTC
 from typing import List, Optional
 from uuid import UUID, uuid4
 
-from app.models.database.conversation import ConversationStatus
+from app.models.database.models import ConversationStatus
 from app.models.domain.conversation import Conversation
 from app.repositories.implementations.conversation_repository import ConversationRepository
 from app.repositories.implementations.claim_conversation_repository import ClaimConversationRepository

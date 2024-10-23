@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, List, Tuple
 from uuid import UUID
-from app.models.database.analysis import AnalysisStatus
+from app.models.database.models import AnalysisStatus
 from app.models.domain.analysis import Analysis
 
 
