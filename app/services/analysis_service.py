@@ -1,5 +1,5 @@
 from datetime import datetime, UTC
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 from uuid import UUID, uuid4
 
 from app.models.database.analysis import AnalysisStatus
@@ -20,7 +20,6 @@ class AnalysisService:
         veracity_score: float,
         confidence_score: float,
         analysis_text: str,
-        metadata: Optional[dict] = None,
     ) -> Analysis:
         """Create new analysis for a claim."""
         # Verify claim exists
@@ -35,7 +34,6 @@ class AnalysisService:
             confidence_score=confidence_score,
             analysis_text=analysis_text,
             status=AnalysisStatus.PENDING.value,
-            metadata=metadata or {},
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )
@@ -57,11 +55,9 @@ class AnalysisService:
             claim_id=claim_id, include_sources=include_sources, include_feedback=include_feedback
         )
 
-    async def update_analysis_status(
-        self, analysis_id: UUID, status: AnalysisStatus, metadata: Optional[dict] = None
-    ) -> Analysis:
+    async def update_analysis_status(self, analysis_id: UUID, status: AnalysisStatus) -> Analysis:
         """Update analysis status."""
-        analysis = await self._analysis_repo.update_status(analysis_id=analysis_id, status=status, metadata=metadata)
+        analysis = await self._analysis_repo.update_status(analysis_id=analysis_id, status=status)
         if not analysis:
             raise NotFoundException("Analysis not found")
         return analysis

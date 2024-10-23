@@ -26,9 +26,7 @@ class AnalysisRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def update_status(
-        self, analysis_id: UUID, status: AnalysisStatus, metadata: Optional[dict] = None
-    ) -> Optional[Analysis]:
+    async def update_status(self, analysis_id: UUID, status: AnalysisStatus) -> Optional[Analysis]:
         """Update analysis status."""
         pass
 

@@ -29,7 +29,6 @@ async def create_feedback(
             analysis_id=data.analysis_id,
             rating=data.rating,
             comment=data.comment,
-            metadata=data.metadata,
         )
         return FeedbackRead.model_validate(feedback)
     except (NotFoundException, DuplicateFeedbackError) as e:
@@ -87,7 +86,6 @@ async def update_feedback(
             user_id=user.id,
             rating=update_data.rating,
             comment=update_data.comment,
-            metadata=update_data.metadata,
         )
         return FeedbackRead.model_validate(result)
     except (NotFoundException, NotAuthorizedException, InvalidFeedbackRatingError) as e:

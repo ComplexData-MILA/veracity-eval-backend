@@ -54,17 +54,13 @@ class AnalysisRepository(BaseRepository[AnalysisModel, Analysis], AnalysisReposi
         result = await self._session.execute(query)
         return [self._to_domain(model) for model in result.scalars().all()]
 
-    async def update_status(
-        self, analysis_id: UUID, status: AnalysisStatus, metadata: Optional[dict] = None
-    ) -> Optional[Analysis]:
+    async def update_status(self, analysis_id: UUID, status: AnalysisStatus) -> Optional[Analysis]:
         """Update analysis status."""
         analysis = await self.get(analysis_id)
         if not analysis:
             return None
 
         analysis.status = status.value
-        if metadata:
-            analysis.metadata = {**(analysis.metadata or {}), **metadata}
 
         return await self.update(analysis)
 

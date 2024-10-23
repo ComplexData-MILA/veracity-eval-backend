@@ -20,3 +20,18 @@ class DomainRead(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DomainList(BaseModel):
+    items: list[DomainRead]
+    total: int
+    limit: int
+    offset: int
+
+
+class DomainUpdate(BaseModel):
+    credibility_score: float
+    is_reliable: bool
+    description: str = None
+
+    model_config = ConfigDict(from_attributes=True)

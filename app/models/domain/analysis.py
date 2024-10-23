@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Optional, List
 from uuid import UUID
 
 from app.models.database.analysis import AnalysisModel, AnalysisStatus
@@ -17,7 +17,6 @@ class Analysis:
     veracity_score: float
     confidence_score: float
     analysis_text: str
-    metadata: Dict
     status: str
     created_at: datetime
     updated_at: datetime
