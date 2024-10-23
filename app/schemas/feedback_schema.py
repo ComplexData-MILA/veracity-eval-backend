@@ -26,3 +26,8 @@ class FeedbackList(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class FeedbackUpdate(BaseModel):
+    rating: float
+    comment: str

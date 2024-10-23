@@ -19,3 +19,12 @@ class AnalysisRead(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AnalysisList(BaseModel):
+    items: list[AnalysisRead]
+    total: int
+    limit: int
+    offset: int
+
+    model_config = ConfigDict(from_attributes=True)
