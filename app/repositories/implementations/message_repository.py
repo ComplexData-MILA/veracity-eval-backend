@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.database.message import MessageModel, MessageSenderType
+from app.models.database.models import MessageModel, MessageSenderType
 from app.models.domain.message import Message
 from app.repositories.base import BaseRepository
 from app.repositories.interfaces.message_repository import MessageRepositoryInterface

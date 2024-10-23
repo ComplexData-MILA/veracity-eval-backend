@@ -3,7 +3,7 @@ from uuid import UUID
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.database.claim import ClaimModel, ClaimStatus
+from app.models.database.models import ClaimModel, ClaimStatus
 from app.models.domain.claim import Claim
 from app.repositories.base import BaseRepository
 from app.repositories.interfaces.claim_repository import ClaimRepositoryInterface

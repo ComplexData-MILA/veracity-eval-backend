@@ -1,11 +1,11 @@
-from typing import Optional, List, Tuple
+from typing import Optional, Tuple
 from uuid import uuid4
 from datetime import datetime, UTC
-from sqlalchemy import select, or_, and_, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.utils.url import normalize_domain_name
-from app.models.database.domain import DomainModel
+from app.models.database.models import DomainModel
 from app.models.domain.domain import Domain
 from app.repositories.base import BaseRepository
 from app.repositories.interfaces.domain_repository import DomainRepositoryInterface
@@ -42,43 +42,6 @@ class DomainRepository(BaseRepository[DomainModel, Domain], DomainRepositoryInte
         result = await self._session.execute(query)
         model = result.scalar_one_or_none()
         return self._to_domain(model) if model else None
-
-    async def search(
-        self,
-        query: str,
-        reliability_filter: Optional[bool] = None,
-        min_credibility: Optional[float] = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Tuple[List[Domain], int]:
-        """Search domains with filters."""
-        base_query = select(self._model_class)
-        filters = []
-
-        if query:
-            search_filter = or_(
-                self._model_class.domain_name.ilike(f"%{query}%"), self._model_class.description.ilike(f"%{query}%")
-            )
-            filters.append(search_filter)
-
-        if reliability_filter is not None:
-            filters.append(self._model_class.is_reliable == reliability_filter)
-
-        if min_credibility is not None:
-            filters.append(self._model_class.credibility_score >= min_credibility)
-
-        if filters:
-            base_query = base_query.where(and_(*filters))
-
-        count_query = select(func.count()).select_from(base_query.subquery())
-        total = await self._session.scalar(count_query)
-
-        query = base_query.order_by(self._model_class.credibility_score.desc()).limit(limit).offset(offset)
-
-        result = await self._session.execute(query)
-        domains = [self._to_domain(model) for model in result.scalars().all()]
-
-        return domains, total
 
     async def get_or_create(self, domain_name: str) -> Tuple[Domain, bool]:
         """Get existing domain or create new one."""

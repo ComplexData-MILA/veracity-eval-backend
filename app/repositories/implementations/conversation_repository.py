@@ -3,7 +3,7 @@ from uuid import UUID
 from datetime import datetime
 from sqlalchemy import select, and_, desc
 
-from app.models.database.conversation import ConversationModel, ConversationStatus
+from app.models.database.models import ConversationModel, ConversationStatus
 from app.models.domain.conversation import Conversation
 from app.repositories.base import BaseRepository
 from app.repositories.interfaces.conversation_repository import (

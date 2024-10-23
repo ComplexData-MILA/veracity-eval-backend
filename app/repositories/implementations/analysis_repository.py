@@ -4,7 +4,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.database.analysis import AnalysisModel, AnalysisStatus
+from app.models.database.models import AnalysisModel, AnalysisStatus
 from app.models.domain.analysis import Analysis
 from app.models.domain.feedback import Feedback
 from app.models.domain.source import Source

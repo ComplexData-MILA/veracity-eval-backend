@@ -8,6 +8,7 @@ from app.models.database.base import Base
 from app.models.database.claim import ClaimModel
 from app.models.database.feedback import FeedbackModel
 from app.models.database.message import MessageModel
+from app.models.database.source import SourceModel
 
 
 class AnalysisStatus(str, enum.Enum):
@@ -24,34 +25,21 @@ class AnalysisModel(Base):
     """Analysis database model."""
 
     claim_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("claims.id"), nullable=False, index=True)
-
     veracity_score: Mapped[float] = mapped_column(nullable=False)
-
     confidence_score: Mapped[float] = mapped_column(nullable=False)
-
     analysis_text: Mapped[str] = mapped_column(Text, nullable=False)
-
     status: Mapped[AnalysisStatus] = mapped_column(
         SQLEnum(AnalysisStatus),
         default=AnalysisStatus.PENDING,
         nullable=False,
         index=True,
-        doc="Current status of the analysis",
     )
 
     # Relationships
     claim: Mapped["ClaimModel"] = relationship(back_populates="analyses", doc="Related claim")
-
-    # sources: Mapped[List["SourceModel"]] = relationship(
-    #     back_populates="analysis", cascade="all, delete-orphan", doc="Sources used in the analysis"
-    # )
-
-    feedback: Mapped[List["FeedbackModel"]] = relationship(
-        back_populates="analysis", cascade="all, delete-orphan", doc="Feedback received on this analysis"
-    )
-    messages: Mapped[List["MessageModel"]] = relationship(
-        back_populates="analysis", cascade="all, delete-orphan", doc="Messages referencing this analysis"
-    )
+    sources: Mapped[List["SourceModel"]] = relationship(back_populates="analysis", cascade="all, delete-orphan")
+    feedback: Mapped[List["FeedbackModel"]] = relationship(back_populates="analysis", cascade="all, delete-orphan")
+    messages: Mapped[List["MessageModel"]] = relationship(back_populates="analysis", cascade="all, delete-orphan")
 
     __table_args__ = (
         # Ensure scores are between 0 and 1

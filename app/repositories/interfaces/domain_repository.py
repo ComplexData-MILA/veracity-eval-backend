@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List, Tuple
+from typing import Optional, Tuple
 from uuid import UUID
 from app.models.domain.domain import Domain
 
@@ -25,18 +25,6 @@ class DomainRepositoryInterface(ABC):
     @abstractmethod
     async def update(self, domain: Domain) -> Domain:
         """Update domain."""
-        pass
-
-    @abstractmethod
-    async def search(
-        self,
-        query: str,
-        reliability_filter: Optional[bool] = None,
-        min_credibility: Optional[float] = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Tuple[List[Domain], int]:
-        """Search domains with filters."""
         pass
 
     @abstractmethod

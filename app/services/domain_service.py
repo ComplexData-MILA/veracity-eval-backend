@@ -1,5 +1,5 @@
 from uuid import UUID, uuid4
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 from datetime import datetime, UTC
 
 from app.models.domain.domain import Domain
@@ -60,19 +60,3 @@ class DomainService:
 
         domain.updated_at = datetime.now(UTC)
         return await self._domain_repo.update(domain)
-
-    async def search_domains(
-        self,
-        query: Optional[str] = None,
-        reliability_filter: Optional[bool] = None,
-        min_credibility: Optional[float] = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Tuple[List[Domain], int]:
-        return await self._domain_repo.search(
-            query=query,
-            reliability_filter=reliability_filter,
-            min_credibility=min_credibility,
-            limit=limit,
-            offset=offset,
-        )

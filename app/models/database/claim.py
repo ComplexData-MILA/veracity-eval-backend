@@ -4,6 +4,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 import enum
 
+from app.models.database.analysis import AnalysisModel
 from app.models.database.base import Base
 from app.models.database.claim_conversation import ClaimConversationModel
 from app.models.database.message import MessageModel
@@ -38,11 +39,7 @@ class ClaimModel(Base):
 
     # Relationships
     user: Mapped["UserModel"] = relationship(back_populates="claims")
-
-    # analyses: Mapped[List["AnalysisModel"]] = relationship(
-    #     back_populates="claim", cascade="all, delete-orphan", "
-    # )
-
+    analyses: Mapped[List["AnalysisModel"]] = relationship(back_populates="claim", cascade="all, delete-orphan")
     claim_conversations: Mapped[List["ClaimConversationModel"]] = relationship(
         back_populates="claim", cascade="all, delete-orphan"
     )

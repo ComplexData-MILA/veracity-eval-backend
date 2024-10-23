@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from typing import Optional
 from uuid import UUID
 from app.services.domain_service import DomainService
-from app.schemas.domain_schema import DomainCreate, DomainUpdate, DomainRead, DomainList
+from app.schemas.domain_schema import DomainCreate, DomainUpdate, DomainRead
 from app.core.utils.url import normalize_domain_name, is_valid_domain
 from app.core.exceptions import NotFoundException, ValidationError
 
@@ -29,21 +28,6 @@ async def create_domain(domain: DomainCreate, domain_service: DomainService = De
         return DomainRead.model_validate(result)
     except ValidationError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-
-@router.get("/search", response_model=DomainList, summary="Search domains")
-async def search_domains(
-    query: Optional[str] = None,
-    is_reliable: Optional[bool] = None,
-    min_credibility: Optional[float] = Query(None, ge=0, le=1),
-    limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    domain_service: DomainService = Depends(),
-) -> DomainList:
-    items, total = await domain_service.search_domains(
-        query=query, reliability_filter=is_reliable, min_credibility=min_credibility, limit=limit, offset=offset
-    )
-    return DomainList(items=[DomainRead.model_validate(d) for d in items], total=total, limit=limit, offset=offset)
 
 
 @router.get("/lookup/{domain_name}", response_model=DomainRead, summary="Lookup domain by name")

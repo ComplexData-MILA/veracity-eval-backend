@@ -2,8 +2,8 @@ from typing import Optional, List
 from uuid import UUID
 from sqlalchemy import select, and_
 
-from app.models.domain.claim_conversation import ClaimConversation
 from app.models.database.models import ClaimConversationModel
+from app.models.domain.claim_conversation import ClaimConversation
 from app.repositories.base import BaseRepository
 
 

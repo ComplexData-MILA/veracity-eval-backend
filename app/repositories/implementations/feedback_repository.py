@@ -4,7 +4,7 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
-from app.models.database.feedback import FeedbackModel
+from app.models.database.models import FeedbackModel
 from app.models.domain.feedback import Feedback
 from app.repositories.base import BaseRepository
 from app.repositories.interfaces.feedback_repository import FeedbackRepositoryInterface

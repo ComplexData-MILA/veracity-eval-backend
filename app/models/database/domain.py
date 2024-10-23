@@ -1,5 +1,5 @@
 from typing import Optional
-from sqlalchemy import CheckConstraint, String, Text, Float, Boolean, Index
+from sqlalchemy import CheckConstraint, String, Text, Float, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.database.base import Base
@@ -14,12 +14,4 @@ class DomainModel(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     __table_args__ = (
         CheckConstraint("credibility_score >= 0 AND credibility_score <= 1", name="check_credibility_score_range"),
-        # Full text search index for domain name and description
-        Index(
-            "idx_domain_search",
-            domain_name,
-            description,
-            postgresql_using="gin",
-            postgresql_ops={"domain_name": "gin_trgm_ops", "description": "gin_trgm_ops"},
-        ),
     )
