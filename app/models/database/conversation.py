@@ -8,6 +8,7 @@ import enum
 
 from app.models.database.base import Base
 from app.models.database.claim_conversation import ClaimConversationModel
+from app.models.database.message import MessageModel
 from app.models.database.user import UserModel
 
 
@@ -31,7 +32,7 @@ class ConversationModel(Base):
 
     # Relationships
     user: Mapped["UserModel"] = relationship(back_populates="conversations")
-    # messages: Mapped[List["MessageModel"]] = relationship(back_populates="conversation", cascade="all, delete-orphan")
+    messages: Mapped[List["MessageModel"]] = relationship(back_populates="conversation", cascade="all, delete-orphan")
     claim_conversations: Mapped[List["ClaimConversationModel"]] = relationship(
         back_populates="conversation", cascade="all, delete-orphan"
     )

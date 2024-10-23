@@ -18,13 +18,12 @@ class ConversationService:
         self._conversation_repo = conversation_repository
         self._claim_conversation_repo = claim_conversation_repository
 
-    async def create_conversation(self, user_id: UUID, metadata: Optional[dict] = None) -> Conversation:
+    async def create_conversation(self, user_id: UUID) -> Conversation:
         conversation = Conversation(
             id=uuid4(),
             user_id=user_id,
             start_time=datetime.now(UTC),
             status=ConversationStatus.ACTIVE.value,
-            metadata=metadata or {},
         )
         return await self._conversation_repo.create(conversation)
 

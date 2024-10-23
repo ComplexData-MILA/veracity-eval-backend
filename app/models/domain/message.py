@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Dict
+from typing import Optional
 from uuid import UUID
 
 from app.models.database.message import MessageModel, MessageSenderType
@@ -18,7 +18,6 @@ class Message:
     claim_id: Optional[UUID] = None
     analysis_id: Optional[UUID] = None
     claim_conversation_id: Optional[UUID] = None
-    metadata: Dict = None
     created_at: datetime = None
     updated_at: datetime = None
 
@@ -34,7 +33,6 @@ class Message:
             claim_id=model.claim_id,
             analysis_id=model.analysis_id,
             claim_conversation_id=model.claim_conversation_id,
-            metadata=model.metadata or {},
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -50,5 +48,4 @@ class Message:
             claim_id=self.claim_id,
             analysis_id=self.analysis_id,
             claim_conversation_id=self.claim_conversation_id,
-            metadata=self.metadata,
         )

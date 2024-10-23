@@ -1,6 +1,6 @@
 from datetime import datetime, UTC
 from typing import Optional
-from sqlalchemy import Text, JSON, Enum as SQLEnum, ForeignKey, Index
+from sqlalchemy import Text, Enum as SQLEnum, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 import enum
@@ -49,8 +49,6 @@ class MessageModel(Base):
     claim_conversation_id: Mapped[Optional[UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("claim_conversations.id"), nullable=True, index=True
     )
-
-    metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True, default=dict)
 
     # Relationships
     conversation: Mapped["ConversationModel"] = relationship(back_populates="messages")

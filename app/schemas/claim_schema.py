@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, Dict, List
+from typing import List
 from datetime import datetime
 from uuid import UUID
 
@@ -9,7 +9,6 @@ class ClaimCreate(BaseModel):
 
     claim_text: str
     context: str
-    metadata: Optional[Dict] = None
 
 
 class ClaimStatusUpdate(BaseModel):
@@ -26,7 +25,6 @@ class ClaimRead(BaseModel):
     claim_text: str
     context: str
     status: str
-    metadata: Dict
     created_at: datetime
     updated_at: datetime
 

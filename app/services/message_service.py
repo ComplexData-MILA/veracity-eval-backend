@@ -22,7 +22,6 @@ class MessageService:
         claim_id: Optional[UUID] = None,
         analysis_id: Optional[UUID] = None,
         claim_conversation_id: Optional[UUID] = None,
-        metadata: Optional[dict] = None,
     ) -> Message:
         """Create a new message."""
         # Verify conversation ownership
@@ -39,7 +38,6 @@ class MessageService:
             claim_id=claim_id,
             analysis_id=analysis_id,
             claim_conversation_id=claim_conversation_id,
-            metadata=metadata or {},
         )
 
         return await self._message_repo.create(message)

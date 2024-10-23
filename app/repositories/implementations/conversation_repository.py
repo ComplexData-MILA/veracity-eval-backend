@@ -31,7 +31,6 @@ class ConversationRepository(BaseRepository[ConversationModel, Conversation], Co
             start_time=model.start_time,
             end_time=model.end_time,
             status=model.status,
-            metadata=model.metadata,
         )
 
     async def get_user_conversations(

@@ -29,7 +29,6 @@ async def create_message(
             claim_id=data.claim_id,
             analysis_id=data.analysis_id,
             claim_conversation_id=data.claim_conversation_id,
-            metadata=data.metadata,
         )
         return MessageRead.model_validate(message)
     except NotAuthorizedException as e:

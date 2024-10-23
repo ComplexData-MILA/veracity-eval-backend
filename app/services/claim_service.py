@@ -12,9 +12,7 @@ class ClaimService:
     def __init__(self, claim_repository: ClaimRepository):
         self._claim_repo = claim_repository
 
-    async def create_claim(
-        self, user_id: UUID, claim_text: str, context: str, metadata: Optional[dict] = None
-    ) -> Claim:
+    async def create_claim(self, user_id: UUID, claim_text: str, context: str) -> Claim:
         """Create a new claim."""
         claim = Claim(
             id=uuid4(),
@@ -22,7 +20,6 @@ class ClaimService:
             claim_text=claim_text,
             context=context,
             status=ClaimStatus.PENDING.value,
-            metadata=metadata or {},
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )

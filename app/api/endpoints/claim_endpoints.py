@@ -21,9 +21,7 @@ async def create_claim(
     # fake user for now
     user = User(id=UUID("00000000-0000-0000-0000-000000000000"), email="bob@test.com")
 
-    claim = await claim_service.create_claim(
-        user_id=user.id, claim_text=data.claim_text, context=data.context, metadata=data.metadata
-    )
+    claim = await claim_service.create_claim(user_id=user.id, claim_text=data.claim_text, context=data.context)
     return ClaimRead.model_validate(claim)
 
 

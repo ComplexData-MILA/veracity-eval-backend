@@ -24,7 +24,6 @@ class MessageRepository(BaseRepository[MessageModel, Message], MessageRepository
             claim_id=message.claim_id,
             analysis_id=message.analysis_id,
             claim_conversation_id=message.claim_conversation_id,
-            metadata=message.metadata,
         )
 
     def _to_domain(self, model: MessageModel) -> Message:
@@ -37,7 +36,6 @@ class MessageRepository(BaseRepository[MessageModel, Message], MessageRepository
             claim_id=model.claim_id,
             analysis_id=model.analysis_id,
             claim_conversation_id=model.claim_conversation_id,
-            metadata=model.metadata or {},
             created_at=model.created_at,
             updated_at=model.updated_at,
         )

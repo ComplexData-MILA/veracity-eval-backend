@@ -6,6 +6,7 @@ import enum
 
 from app.models.database.base import Base
 from app.models.database.claim_conversation import ClaimConversationModel
+from app.models.database.message import MessageModel
 from app.models.database.user import UserModel
 
 
@@ -45,7 +46,6 @@ class ClaimModel(Base):
     claim_conversations: Mapped[List["ClaimConversationModel"]] = relationship(
         back_populates="claim", cascade="all, delete-orphan"
     )
-
-    # messages: Mapped[List["MessageModel"]] = relationship(
-    #     back_populates="claim", cascade="all, delete-orphan", doc="Messages referencing this claim"
-    # )
+    messages: Mapped[List["MessageModel"]] = relationship(
+        back_populates="claim", cascade="all, delete-orphan", doc="Messages referencing this claim"
+    )

@@ -1,11 +1,13 @@
 from datetime import UTC, datetime
-from typing import Optional
+from typing import List, Optional
 from sqlalchemy import ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.models.database.base import Base
+from app.models.database.claim import ClaimModel
 from app.models.database.conversation import ConversationStatus, ConversationModel
+from app.models.database.message import MessageModel
 
 
 class ClaimConversationModel(Base):
@@ -23,7 +25,7 @@ class ClaimConversationModel(Base):
 
     # Relationships
     conversation: Mapped["ConversationModel"] = relationship(back_populates="claim_conversations")
-    # claim: Mapped["ClaimModel"] = relationship(back_populates="claim_conversations")
-    # messages: Mapped[List["MessageModel"]] = relationship(
-    #     back_populates="claim_conversation", cascade="all, delete-orphan"
-    # )
+    claim: Mapped["ClaimModel"] = relationship(back_populates="claim_conversations")
+    messages: Mapped[List["MessageModel"]] = relationship(
+        back_populates="claim_conversation", cascade="all, delete-orphan"
+    )
