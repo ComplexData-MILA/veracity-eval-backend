@@ -1,11 +1,41 @@
-from uuid import UUID
+from dataclasses import dataclass
 from datetime import datetime
+from uuid import UUID
+
+from app.models.database.claim import ClaimModel, ClaimStatus
 
 
+@dataclass
 class Claim:
-    def __init__(self, id: UUID, user_id: UUID, claim_text: str, context: str, created_at: datetime):
-        self.id = id
-        self.user_id = user_id
-        self.claim_text = claim_text
-        self.context = context
-        self.created_at = created_at
+    """Domain model for claims."""
+
+    id: UUID
+    user_id: UUID
+    claim_text: str
+    context: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_model(cls, model: "ClaimModel") -> "Claim":
+        """Create domain model from database model."""
+        return cls(
+            id=model.id,
+            user_id=model.user_id,
+            claim_text=model.claim_text,
+            context=model.context,
+            status=model.status.value,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
+
+    def to_model(self) -> "ClaimModel":
+        """Convert to database model."""
+        return ClaimModel(
+            id=self.id,
+            user_id=self.user_id,
+            claim_text=self.claim_text,
+            context=self.context,
+            status=ClaimStatus(self.status),
+        )

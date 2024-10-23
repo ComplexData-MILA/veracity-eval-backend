@@ -1,29 +1,53 @@
-from fastapi import APIRouter, Depends, HTTPException
-from uuid import UUID
+from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
-from app.schemas.claim_conversation_schema import ClaimConversationCreate, ClaimConversationRead
+from uuid import UUID
+
+from app.models.domain.user import User
 from app.services.claim_conversation_service import ClaimConversationService
+from app.schemas.claim_conversation_schema import (
+    ClaimConversationCreate,
+    ClaimConversationRead,
+)
+from app.core.exceptions import NotFoundException, NotAuthorizedException
 
-router = APIRouter()
+router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
-@router.post("/", response_model=ClaimConversationRead)
+@router.post(
+    "/{conversation_id}/claims",
+    response_model=ClaimConversationRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a claim conversation",
+)
 async def create_claim_conversation(
-    claim_conversation_create: ClaimConversationCreate, service: ClaimConversationService = Depends()
+    conversation_id: UUID,
+    data: ClaimConversationCreate,
+    # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
+    claim_conversation_service: ClaimConversationService = Depends(),
 ):
-    claim_conversation = service.create_claim_conversation(claim_conversation_create)
-    return ClaimConversationRead.model_validate(claim_conversation)
+    # fake user for now
+    user = User(id=UUID("00000000-0000-0000-0000-000000000000"), email="bob@test.com")
+    try:
+        claim_conv, _ = await claim_conversation_service.create_claim_conversation(
+            conversation_id=conversation_id, user_id=user.id, claim_id=data.claim_id
+        )
+        return ClaimConversationRead.model_validate(claim_conv)
+    except (NotFoundException, NotAuthorizedException) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-@router.get("/{claim_conversation_id}", response_model=ClaimConversationRead)
-async def get_claim_conversation(claim_conversation_id: UUID, service: ClaimConversationService = Depends()):
-    claim_conversation = service.get_claim_conversation(claim_conversation_id)
-    if not claim_conversation:
-        raise HTTPException(status_code=404, detail="Claim conversation not found")
-    return ClaimConversationRead.model_validate(claim_conversation)
-
-
-@router.get("/conversation/{conversation_id}", response_model=List[ClaimConversationRead])
-async def get_claim_conversations_by_conversation(conversation_id: UUID, service: ClaimConversationService = Depends()):
-    claim_conversations = service.get_claim_conversations_by_conversation(conversation_id)
-    return [ClaimConversationRead.model_validate(cc) for cc in claim_conversations]
+@router.get("/{conversation_id}/claims", response_model=List[ClaimConversationRead], summary="List claim conversations")
+async def list_claim_conversations(
+    conversation_id: UUID,
+    # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
+    claim_conversation_service: ClaimConversationService = Depends(),
+):
+    # fake user for now
+    user = User(id=UUID("00000000-0000-0000-0000-000000000000"), email="bob@test.com")
+    try:
+        claim_convs = await claim_conversation_service.list_conversation_claims(
+            conversation_id=conversation_id, user_id=user.id
+        )
+        return [ClaimConversationRead.model_validate(cc) for cc in claim_convs]
+    except (NotFoundException, NotAuthorizedException) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

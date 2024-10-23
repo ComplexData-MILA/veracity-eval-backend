@@ -2,11 +2,11 @@ from datetime import datetime
 from typing import List, Optional
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.models.database.base import Base, TimestampMixin
-from app.models.database.models import ConversationModel
+from app.models.database.base import Base
+from app.models.database import ConversationModel
 
 
-class UserModel(Base, TimestampMixin):
+class UserModel(Base):
     __tablename__ = "users"
 
     username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)

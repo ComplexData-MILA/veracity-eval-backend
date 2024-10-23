@@ -24,7 +24,6 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 async def create_conversation(
     data: ConversationCreate,
     # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    current_data: User,
     conversation_service: ConversationService = Depends(),
 ):
     # fake user for now

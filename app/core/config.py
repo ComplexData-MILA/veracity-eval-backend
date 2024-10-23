@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 from pydantic_settings import BaseSettings
 
 
@@ -9,9 +9,6 @@ class Settings(BaseSettings):
     POSTGRES_DB: Optional[str] = None
     POSTGRES_HOST: Optional[str] = None
     POSTGRES_PORT: str = "5432"
-    AUTH0_DOMAIN: str
-    AUTH0_AUDIENCE: str
-    AUTH0_ALGORITHMS: List[str] = ["RS256"]
 
     @property
     def get_database_url(self) -> str:

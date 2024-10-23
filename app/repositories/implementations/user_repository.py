@@ -5,7 +5,7 @@ from sqlalchemy import select, update, and_, or_
 from sqlalchemy.exc import IntegrityError
 
 from app.models.domain.user import User
-from app.models.database.models.user import UserModel
+from app.models.database.user import UserModel
 from app.repositories.base import BaseRepository
 from app.repositories.interfaces.user_repository import UserRepositoryInterface
 from app.core.exceptions import UserAlreadyExistsError
