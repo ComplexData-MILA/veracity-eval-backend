@@ -1,7 +1,12 @@
+from dataclasses import dataclass
+from typing import Optional
 from uuid import UUID
 from datetime import datetime
 
+from app.models.database.models.conversation import ConversationStatus
 
+
+@dataclass
 class ClaimConversation:
     def __init__(
         self,
@@ -9,8 +14,8 @@ class ClaimConversation:
         conversation_id: UUID,
         claim_id: UUID,
         start_time: datetime,
-        end_time: datetime = None,
-        status: str = "active",
+        end_time: Optional[datetime] = None,
+        status: ConversationStatus = ConversationStatus.ACTIVE,
     ):
         self.id = id
         self.conversation_id = conversation_id

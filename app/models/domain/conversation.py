@@ -1,8 +1,10 @@
+from dataclasses import dataclass
 from uuid import UUID
 from datetime import datetime
 from typing import Optional, List
 
 
+@dataclass
 class Conversation:
     def __init__(
         self,
