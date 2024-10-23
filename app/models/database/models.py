@@ -141,18 +141,21 @@ class SourceModel(Base):
         doc="Reference to the analysis using this source",
     )
 
-    url: Mapped[str] = mapped_column(String(2048), nullable=False, doc="Source URL")  # Max URL length
-    title: Mapped[str] = mapped_column(String(512), nullable=False, doc="Source title")
-    snippet: Mapped[str] = mapped_column(Text, nullable=False, doc="Relevant text snippet from source")
-    domain_id: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("domains.id"), nullable=True, index=True, doc="Reference to the source domain"
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    title: Mapped[str] = mapped_column(
+        String(512),
+        nullable=False,
     )
-    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True, doc="Full source content if available")
-    credibility_score: Mapped[float] = mapped_column(Float, nullable=False, doc="Source credibility score (0-1)")
+    snippet: Mapped[str] = mapped_column(Text, nullable=False)
+    domain_id: Mapped[Optional[UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("domains.id"), nullable=True, index=True
+    )
+    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    credibility_score: Mapped[float] = mapped_column(Float, nullable=False)
 
     # Relationships
-    analysis: Mapped["AnalysisModel"] = relationship(back_populates="sources", doc="Related analysis")
-    domain: Mapped[Optional["DomainModel"]] = relationship(doc="Related domain")
+    analysis: Mapped["AnalysisModel"] = relationship(back_populates="sources")
+    domain: Mapped[Optional["DomainModel"]] = relationship()
 
     __table_args__ = (
         CheckConstraint(
