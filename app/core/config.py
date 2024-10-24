@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     POSTGRES_DB: Optional[str] = None
     POSTGRES_HOST: Optional[str] = None
     POSTGRES_PORT: str = "5432"
+    DEBUG: bool = True
 
     @property
     def get_database_url(self) -> str:

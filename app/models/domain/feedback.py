@@ -1,12 +1,42 @@
-from uuid import UUID
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Optional
+from uuid import UUID
+
+from app.models.database.models import FeedbackModel
 
 
+@dataclass
 class Feedback:
-    def __init__(self, id: UUID, analysis_id: UUID, user_id: UUID, rating: float, comment: str, created_at: datetime):
-        self.id = id
-        self.analysis_id = analysis_id
-        self.user_id = user_id
-        self.rating = rating
-        self.comment = comment
-        self.created_at = created_at
+    """Domain model for feedback."""
+
+    id: UUID
+    analysis_id: UUID
+    user_id: UUID
+    rating: float
+    comment: Optional[str]
+    created_at: datetime = None
+    updated_at: datetime = None
+
+    @classmethod
+    def from_model(cls, model: "FeedbackModel") -> "Feedback":
+        """Create domain model from database model."""
+        return cls(
+            id=model.id,
+            analysis_id=model.analysis_id,
+            user_id=model.user_id,
+            rating=model.rating,
+            comment=model.comment,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
+
+    def to_model(self) -> "FeedbackModel":
+        """Convert to database model."""
+        return FeedbackModel(
+            id=self.id,
+            analysis_id=self.analysis_id,
+            user_id=self.user_id,
+            rating=self.rating,
+            comment=self.comment,
+        )

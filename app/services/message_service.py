@@ -1,31 +1,72 @@
+from datetime import datetime, UTC
 from typing import List, Optional
-from uuid import UUID
-from datetime import datetime
+from uuid import UUID, uuid4
+
 from app.models.domain.message import Message
-from app.schemas.message_schema import MessageCreate
+from app.repositories.implementations.message_repository import MessageRepository
+from app.repositories.implementations.conversation_repository import ConversationRepository
+from app.core.exceptions import NotAuthorizedException
 
 
 class MessageService:
-    def create_message(self, message_create: MessageCreate) -> Message:
-        return Message(
-            id=UUID.uuid4(),
-            conversation_id=message_create.conversation_id,
-            sender_type=message_create.sender_type,
-            content=message_create.content,
-            timestamp=datetime.now(),
-            claim_conversation_id=message_create.claim_conversation_id,
-            claim_id=message_create.claim_id,
-            analysis_id=message_create.analysis_id,
+    def __init__(self, message_repository: MessageRepository, conversation_repository: ConversationRepository):
+        self._message_repo = message_repository
+        self._conversation_repo = conversation_repository
+
+    async def create_message(
+        self,
+        conversation_id: UUID,
+        sender_type: str,
+        content: str,
+        user_id: UUID,
+        claim_id: Optional[UUID] = None,
+        analysis_id: Optional[UUID] = None,
+        claim_conversation_id: Optional[UUID] = None,
+    ) -> Message:
+        """Create a new message."""
+        # Verify conversation ownership
+        conversation = await self._conversation_repo.get(conversation_id)
+        if not conversation or conversation.user_id != user_id:
+            raise NotAuthorizedException("Not authorized to access this conversation")
+
+        message = Message(
+            id=uuid4(),
+            conversation_id=conversation_id,
+            sender_type=sender_type,
+            content=content,
+            timestamp=datetime.now(UTC),
+            claim_id=claim_id,
+            analysis_id=analysis_id,
+            claim_conversation_id=claim_conversation_id,
         )
 
-    def get_message(self, message_id: UUID) -> Message:
-        # In a real implementation, this would fetch from a database
-        pass
+        return await self._message_repo.create(message)
 
-    def get_messages_by_conversation(
-        self, conversation_id: UUID, claim_conversation_id: Optional[UUID] = None
+    async def get_conversation_messages(
+        self, conversation_id: UUID, user_id: UUID, before: Optional[datetime] = None, limit: int = 50
     ) -> List[Message]:
-        # In a real implementation, this would fetch from a database
-        # If claim_conversation_id is provided, return only messages for that specific claim conversation
-        # If not provided, return all messages in the conversation
-        pass
+        """Get messages for a conversation."""
+        # Verify conversation ownership
+        conversation = await self._conversation_repo.get(conversation_id)
+        if not conversation or conversation.user_id != user_id:
+            raise NotAuthorizedException("Not authorized to access this conversation")
+
+        return await self._message_repo.get_conversation_messages(
+            conversation_id=conversation_id, before=before, limit=limit
+        )
+
+    async def get_claim_conversation_messages(
+        self, claim_conversation_id: UUID, user_id: UUID, before: Optional[datetime] = None, limit: int = 50
+    ) -> List[Message]:
+        """Get messages for a claim conversation."""
+        messages = await self._message_repo.get_claim_conversation_messages(
+            claim_conversation_id=claim_conversation_id, before=before, limit=limit
+        )
+
+        if messages:
+            # Verify ownership using first message's conversation
+            conversation = await self._conversation_repo.get(messages[0].conversation_id)
+            if not conversation or conversation.user_id != user_id:
+                raise NotAuthorizedException("Not authorized to access these messages")
+
+        return messages

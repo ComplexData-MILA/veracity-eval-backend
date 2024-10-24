@@ -1,33 +1,62 @@
 from uuid import UUID, uuid4
-from datetime import datetime
+from typing import Optional, Tuple
+from datetime import datetime, UTC
+
 from app.models.domain.domain import Domain
-from app.schemas.domain_schema import DomainCreate
+from app.repositories.implementations.domain_repository import DomainRepository
+from app.core.exceptions import NotFoundException
+from app.core.utils.url import normalize_domain_name
 
 
 class DomainService:
-    def create_domain(self, domain_create: DomainCreate) -> Domain:
-        return Domain(
+    def __init__(self, domain_repository: DomainRepository):
+        self._domain_repo = domain_repository
+
+    async def create_domain(
+        self,
+        domain_name: str,
+        credibility_score: float,
+        is_reliable: bool,
+        description: Optional[str] = None,
+    ) -> Domain:
+        normalized_name = normalize_domain_name(domain_name)
+
+        domain = Domain(
             id=uuid4(),
-            domain_name=domain_create.domain_name,
-            credibility_score=domain_create.credibility_score,
-            is_reliable=domain_create.is_reliable,
-            description=domain_create.description,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            domain_name=normalized_name,
+            credibility_score=credibility_score,
+            is_reliable=is_reliable,
+            description=description,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
-    def get_domain(self, domain_id: UUID) -> Domain:
-        # In a real implementation, this would fetch from a database
-        pass
+        return await self._domain_repo.create(domain)
 
-    def get_domain_by_name(self, domain_name: str) -> Domain:
-        # In a real implementation, this would fetch from a database
-        pass
+    async def get_domain(self, domain_id: UUID) -> Domain:
+        domain = await self._domain_repo.get(domain_id)
+        if not domain:
+            raise NotFoundException("Domain not found")
+        return domain
 
-    def update_domain(self, domain_id: UUID, domain_update: DomainCreate) -> Domain:
-        # In a real implementation, this would fetch from a database
-        pass
+    async def get_or_create_domain(self, domain_name: str) -> Tuple[Domain, bool]:
+        return await self._domain_repo.get_or_create(domain_name)
 
-    def delete_domain(self, domain_id: UUID) -> bool:
-        # In a real implementation, this would fetch from a database
-        pass
+    async def update_domain(
+        self,
+        domain_id: UUID,
+        credibility_score: Optional[float] = None,
+        is_reliable: Optional[bool] = None,
+        description: Optional[str] = None,
+    ) -> Domain:
+        domain = await self.get_domain(domain_id)
+
+        if credibility_score is not None:
+            domain.credibility_score = credibility_score
+        if is_reliable is not None:
+            domain.is_reliable = is_reliable
+        if description is not None:
+            domain.description = description
+
+        domain.updated_at = datetime.now(UTC)
+        return await self._domain_repo.update(domain)

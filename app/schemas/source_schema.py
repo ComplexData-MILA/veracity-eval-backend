@@ -19,3 +19,12 @@ class SourceRead(BaseModel):
     credibility_score: float
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class SourceList(BaseModel):
+    items: list[SourceRead]
+    total: int
+    limit: int
+    offset: int
+
+    model_config = ConfigDict(from_attributes=True)

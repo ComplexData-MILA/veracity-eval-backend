@@ -19,3 +19,15 @@ class FeedbackRead(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class FeedbackList(BaseModel):
+    items: list[FeedbackRead]
+    total: int
+    limit: int
+    offset: int
+
+
+class FeedbackUpdate(BaseModel):
+    rating: float
+    comment: str
