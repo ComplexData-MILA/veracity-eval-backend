@@ -30,7 +30,6 @@ def upgrade() -> None:
     op.execute("CREATE TYPE analysis_status AS ENUM ('pending', 'processing', 'completed', 'failed', 'disputed')")
 
     # Add new columns to users table
-    op.add_column("users", sa.Column("auth0_id", sa.String(128), nullable=False))
     op.add_column("users", sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"))
     op.create_index(op.f("ix_users_auth0_id"), "users", ["auth0_id"], unique=True)
     op.create_index(op.f("ix_users_email"), "users", ["email"], unique=True)
