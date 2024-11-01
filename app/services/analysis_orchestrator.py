@@ -1,19 +1,23 @@
+import logging
 from typing import AsyncGenerator, Dict, Any, List, Optional
 from uuid import UUID, uuid4
-from datetime import datetime
+from datetime import UTC, datetime
 import json
 
 from app.core.llm.interfaces import LLMProvider
-from app.core.llm.protocols import LLMMessage
+from app.models.database.models import AnalysisStatus, ClaimStatus
 from app.models.domain.claim import Claim
 from app.models.domain.analysis import Analysis
 from app.models.domain.message import Message
+from app.core.llm.messages import Message as LLMMessage
 from app.models.domain.conversation import Conversation
 from app.models.domain.claim_conversation import ClaimConversation
 from app.repositories.implementations.claim_repository import ClaimRepository
 from app.repositories.implementations.analysis_repository import AnalysisRepository
 from app.repositories.implementations.message_repository import MessageRepository
 from app.repositories.implementations.conversation_repository import ConversationRepository
+
+logger = logging.getLogger(__name__)
 
 
 class AnalysisState:
@@ -39,6 +43,69 @@ class AnalysisOrchestrator:
         self._conversation_repo = conversation_repo
         self._message_repo = message_repo
         self._analysis_state = AnalysisState()
+
+    async def _generate_analysis(self, claim_text: str, context: str) -> AsyncGenerator[Dict[str, Any], None]:
+        """Generate analysis for a claim with improved streaming."""
+        prompt = (
+            "Analyze the following claim and provide:\n"
+            "1. A veracity score (0-1)\n"
+            "2. A confidence score (0-1)\n"
+            "3. A detailed analysis\n\n"
+            f"Claim: {claim_text}\n"
+            f"Context: {context}"
+        )
+
+        yield {"type": "status", "content": "Analyzing claim content..."}
+
+        analysis_text = []
+        async for chunk in self._llm.generate_stream([LLMMessage(role="user", content=prompt)]):
+            if not chunk.is_complete:
+                analysis_text.append(chunk.text)
+                yield {"type": "content", "content": chunk.text}
+            else:
+                # Create analysis record
+                full_text = "".join(analysis_text)
+
+                try:
+                    # Extract scores
+                    scores_prompt = (
+                        "Extract the veracity and confidence scores from this analysis. "
+                        "Respond with only a JSON object containing 'veracity_score' and "
+                        "'confidence_score':\n\n"
+                        f"{full_text}"
+                    )
+                    scores_response = await self._llm.generate_response(
+                        [LLMMessage(role="user", content=scores_prompt)]
+                    )
+                    scores = json.loads(scores_response.text)
+
+                    # Create the analysis
+                    analysis = Analysis(
+                        id=uuid4(),
+                        claim_id=self._analysis_state.current_claim.id,
+                        veracity_score=float(scores["veracity_score"]),
+                        confidence_score=float(scores["confidence_score"]),
+                        analysis_text=full_text,
+                        status=AnalysisStatus.COMPLETED.value,
+                        created_at=datetime.now(UTC),
+                        updated_at=datetime.now(UTC),
+                    )
+
+                    created_analysis = await self._analysis_repo.create(analysis)
+                    self._analysis_state.current_analysis = created_analysis
+
+                    yield {
+                        "type": "analysis_complete",
+                        "content": {
+                            "analysis_id": str(created_analysis.id),
+                            "veracity_score": created_analysis.veracity_score,
+                            "confidence_score": created_analysis.confidence_score,
+                        },
+                    }
+
+                except Exception as e:
+                    yield {"type": "error", "content": f"Error creating analysis: {str(e)}"}
+                    raise
 
     async def process_user_message(
         self, user_id: UUID, content: str, conversation_id: Optional[UUID] = None
@@ -132,36 +199,6 @@ class AnalysisOrchestrator:
         response = await self._llm.generate_response([LLMMessage(role="user", content=prompt)])
         return response.text.strip()
 
-    async def _generate_analysis(self, claim_text: str, context: str) -> AsyncGenerator[Dict[str, Any], None]:
-        """Generate analysis for a claim"""
-        prompt = (
-            "Analyze the following claim and provide:\n"
-            "1. A veracity score (0-1)\n"
-            "2. A confidence score (0-1)\n"
-            "3. A detailed analysis\n\n"
-            f"Claim: {claim_text}\n"
-            f"Context: {context}"
-        )
-
-        analysis_text = []
-        async for chunk in self._llm.generate_stream([LLMMessage(role="user", content=prompt)]):
-            if not chunk.is_complete:
-                analysis_text.append(chunk.text)
-                yield {"type": "content", "content": chunk.text}
-            else:
-                # Create analysis record
-                full_text = "".join(analysis_text)
-                analysis = await self._create_analysis(full_text, self._analysis_state.current_claim.id)
-
-                yield {
-                    "type": "analysis_complete",
-                    "content": {
-                        "analysis_id": str(analysis.id),
-                        "veracity_score": analysis.veracity_score,
-                        "confidence_score": analysis.confidence_score,
-                    },
-                }
-
     async def _create_analysis(self, analysis_text: str, claim_id: UUID) -> Analysis:
         """Create analysis record from generated text"""
         # Extract scores using LLM
@@ -204,3 +241,50 @@ class AnalysisOrchestrator:
             claim_id=claim_id,
         )
         return await self._message_repo.create(message)
+
+    async def analyze_claim_stream(self, claim_id: UUID, user_id: UUID) -> AsyncGenerator[Dict[str, Any], None]:
+        """Stream the analysis process for a claim."""
+        try:
+            logger.info(f"Starting analysis for claim {claim_id}")
+
+            # Get the claim
+            claim = await self._claim_repo.get(claim_id)
+            if not claim:
+                raise ValueError(f"Claim {claim_id} not found")
+
+            logger.debug(f"Retrieved claim: {claim.claim_text}")
+
+            # Update state
+            self._analysis_state.current_claim = claim
+
+            # Update claim status to analyzing
+            await self._claim_repo.update_status(claim_id, ClaimStatus.analyzing)
+
+            yield {"type": "status", "content": "Starting analysis..."}
+
+            # Detect if it's a verifiable claim
+            is_verifiable = await self._detect_claim(claim.claim_text)
+            logger.debug(f"Claim verifiable check result: {is_verifiable}")
+
+            if not is_verifiable:
+                yield {"type": "status", "content": "This doesn't appear to be a verifiable claim."}
+                await self._claim_repo.update_status(claim_id, ClaimStatus.rejected)
+                return
+
+            # Generate analysis
+            logger.debug("Starting analysis generation")
+            async for chunk in self._generate_analysis(claim.claim_text, claim.context):
+                yield chunk
+
+            # Update claim status to analyzed
+            await self._claim_repo.update_status(claim_id, ClaimStatus.analyzed)
+
+            logger.info(f"Completed analysis for claim {claim_id}")
+
+        except Exception as e:
+            logger.error(f"Error in analyze_claim_stream: {str(e)}", exc_info=True)
+            # Update claim status to failed if there's an error
+            if self._analysis_state.current_claim:
+                await self._claim_repo.update_status(claim_id, ClaimStatus.rejected)
+            yield {"type": "error", "content": str(e)}
+            raise

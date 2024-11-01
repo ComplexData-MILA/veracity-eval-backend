@@ -23,7 +23,7 @@ class ConversationService:
             id=uuid4(),
             user_id=user_id,
             start_time=datetime.now(UTC),
-            status=ConversationStatus.ACTIVE.value,
+            status=ConversationStatus.active,
         )
         return await self._conversation_repo.create(conversation)
 

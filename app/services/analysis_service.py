@@ -33,7 +33,7 @@ class AnalysisService:
             veracity_score=veracity_score,
             confidence_score=confidence_score,
             analysis_text=analysis_text,
-            status=AnalysisStatus.PENDING.value,
+            status=AnalysisStatus.pending,
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )

@@ -19,7 +19,7 @@ class ClaimRepository(BaseRepository[ClaimModel, Claim], ClaimRepositoryInterfac
             user_id=claim.user_id,
             claim_text=claim.claim_text,
             context=claim.context,
-            status=ClaimStatus(claim.status),
+            status=ClaimStatus(claim.status).value,
         )
 
     def _to_domain(self, model: ClaimModel) -> Claim:
@@ -28,7 +28,7 @@ class ClaimRepository(BaseRepository[ClaimModel, Claim], ClaimRepositoryInterfac
             user_id=model.user_id,
             claim_text=model.claim_text,
             context=model.context,
-            status=model.status.value,
+            status=ClaimStatus(model.status),
             created_at=model.created_at,
             updated_at=model.updated_at,
         )

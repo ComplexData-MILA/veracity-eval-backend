@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import Optional
 from uuid import UUID
@@ -20,7 +21,16 @@ async def create_claim(
 ):
     """Create a new claim for the authenticated user."""
     # fake user for now
-    user = User(id=UUID("00000000-0000-0000-0000-000000000000"), email="bob@test.com")
+    user = User(
+        id=UUID("00000000-0000-0000-0000-000000000000"),
+        email="bob@test.com",
+        auth0_id="auth0|1234567890",
+        username="bob",
+        is_active=True,
+        last_login=None,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
 
     claim = await claim_service.create_claim(user_id=user.id, claim_text=data.claim_text, context=data.context)
     return ClaimRead.model_validate(claim)
@@ -36,7 +46,16 @@ async def list_claims(
 ):
     """List claims for the authenticated user with pagination."""
     # fake user for now
-    user = User(id=UUID("00000000-0000-0000-0000-000000000000"), email="bob@test.com")
+    user = User(
+        id=UUID("00000000-0000-0000-0000-000000000000"),
+        email="bob@test.com",
+        auth0_id="auth0|1234567890",
+        username="bob",
+        is_active=True,
+        last_login=None,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
 
     claims, total = await claim_service.list_user_claims(user_id=user.id, status=status, limit=limit, offset=offset)
     return ClaimList(items=[ClaimRead.model_validate(c) for c in claims], total=total, limit=limit, offset=offset)
@@ -50,7 +69,16 @@ async def get_claim(
 ):
     """Get a specific claim by ID."""
     # fake user for now
-    user = User(id=UUID("00000000-0000-0000-0000-000000000000"), email="bob@test.com")
+    user = User(
+        id=UUID("00000000-0000-0000-0000-000000000000"),
+        email="bob@test.com",
+        auth0_id="auth0|1234567890",
+        username="bob",
+        is_active=True,
+        last_login=None,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
 
     try:
         claim = await claim_service.get_claim(claim_id=claim_id, user_id=user.id)
@@ -68,7 +96,16 @@ async def update_claim_status(
 ):
     """Update a claim's status."""
     # fake user for now
-    user = User(id=UUID("00000000-0000-0000-0000-000000000000"), email="bob@test.com")
+    user = User(
+        id=UUID("00000000-0000-0000-0000-000000000000"),
+        email="bob@test.com",
+        auth0_id="auth0|1234567890",
+        username="bob",
+        is_active=True,
+        last_login=None,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
 
     try:
         claim = await claim_service.update_claim_status(

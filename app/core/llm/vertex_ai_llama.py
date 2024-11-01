@@ -1,53 +1,93 @@
+import logging
 from google.cloud import aiplatform
+from google.oauth2 import service_account
 from typing import AsyncGenerator, List
-from datetime import datetime
-import asyncio
+from datetime import UTC, datetime
 
 from app.core.llm.interfaces import LLMProvider
-from app.core.llm.protocols import LLMMessage, LLMResponse, LLMResponseChunk
-from app.core.config import Settings
+from app.core.llm.messages import Response, ResponseChunk
+from app.core.llm.protocols import LLMMessage
+
+logger = logging.getLogger(__name__)
 
 
 class VertexAILlamaProvider(LLMProvider):
-    def __init__(self, settings: Settings):
-        self.client = aiplatform.gapic.PredictionServiceClient(
-            client_options={"api_endpoint": f"{settings.VERTEX_AI_LOCATION}-aiplatform.googleapis.com"}
-        )
-        self.project_id = settings.GOOGLE_CLOUD_PROJECT
-        self.location = settings.VERTEX_AI_LOCATION
-        self.model_name = settings.LLAMA_MODEL_NAME
-        self.endpoint = f"projects/{self.project_id}/locations/{self.location}/endpoints/openapi/chat/completions"
+    def __init__(self, settings):
+        try:
+            credentials = service_account.Credentials.from_service_account_file(
+                settings.GOOGLE_APPLICATION_CREDENTIALS, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
 
-    async def generate_response(self, messages: List[LLMMessage], temperature: float = 0.7) -> LLMResponse:
-        instance = {
-            "model": self.model_name,
-            "messages": [{"role": m.role, "content": m.content} for m in messages],
-            "temperature": temperature,
-        }
+            client_options = {"api_endpoint": f"{settings.VERTEX_AI_LOCATION}-aiplatform.googleapis.com"}
 
-        response = self.client.predict(endpoint=self.endpoint, instances=[instance])
+            aiplatform.init(
+                project=settings.GOOGLE_CLOUD_PROJECT, location=settings.VERTEX_AI_LOCATION, credentials=credentials
+            )
 
-        return LLMResponse(
-            text=response.predictions[0]["content"],
-            confidence_score=response.predictions[0].get("confidence", 0.0),
-            created_at=datetime.now(),
-            metadata={"model": self.model_name},
-        )
+            self.client = aiplatform.gapic.PredictionServiceClient(
+                credentials=credentials, client_options=client_options
+            )
+
+            self.endpoint = f"projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/{settings.VERTEX_AI_LOCATION}/endpoints/{settings.VERTEX_AI_ENDPOINT_ID}"
+
+            logger.info(f"Initialized Vertex AI provider with endpoint: {self.endpoint}")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize Vertex AI provider: {str(e)}", exc_info=True)
+            raise
+
+    async def generate_response(self, messages: List[LLMMessage], temperature: float = 0.7) -> Response:
+        try:
+            instance = {
+                "messages": [{"role": m.role, "content": m.content} for m in messages],
+                "temperature": temperature,
+                "max_output_tokens": 1024,
+                "model": "llama3-70b-instruct-maas",
+            }
+
+            response = self.client.predict(
+                endpoint=self.endpoint, instances=[instance], parameters={"temperature": temperature}
+            )
+
+            if not response.predictions:
+                raise ValueError("No prediction returned from model")
+
+            prediction = response.predictions[0]
+            generated_text = prediction["candidates"][0]["content"]
+
+            return Response(
+                text=generated_text,
+                confidence_score=prediction.get("candidates", [{}])[0]
+                .get("safety_attributes", {})
+                .get("scores", [0])[0],
+                created_at=datetime.now(UTC),
+                metadata={"model": "vertexai-llama"},
+            )
+        except Exception as e:
+            logger.error(f"Error generating response: {str(e)}", exc_info=True)
+            raise
 
     async def generate_stream(
         self, messages: List[LLMMessage], temperature: float = 0.7
-    ) -> AsyncGenerator[LLMResponseChunk, None]:
-        instance = {
-            "model": self.model_name,
-            "messages": [{"role": m.role, "content": m.content} for m in messages],
-            "temperature": temperature,
-            "stream": True,
-        }
+    ) -> AsyncGenerator[ResponseChunk, None]:
+        try:
+            instance = {
+                "messages": [{"role": m.role, "content": m.content} for m in messages],
+                "model": "llama3-70b-instruct-maas",
+            }
 
-        response = self.client.predict(endpoint=self.endpoint, instances=[instance])
+            logger.debug(f"Starting stream request to Vertex AI: {instance}")
 
-        for chunk in response.predictions[0]["chunks"]:
-            yield LLMResponseChunk(text=chunk["content"], is_complete=False, metadata={"model": self.model_name})
-            await asyncio.sleep(0.05)  # Natural typing speed simulation
+            response = self.client.predict(endpoint=self.endpoint, instances=[instance])
 
-        yield LLMResponseChunk(text="", is_complete=True, metadata={"model": self.model_name})
+            for prediction in response.predictions:
+                if "content" in prediction:
+                    yield ResponseChunk(
+                        text=prediction["content"], is_complete=False, metadata={"model": "vertexai-llama"}
+                    )
+
+            yield ResponseChunk(text="", is_complete=True, metadata={"model": "vertexai-llama"})
+
+        except Exception as e:
+            logger.error(f"Error generating stream: {str(e)}", exc_info=True)
+            raise

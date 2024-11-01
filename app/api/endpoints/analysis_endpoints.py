@@ -1,9 +1,11 @@
+from datetime import UTC, datetime
 import json
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import List
 from uuid import UUID
+import logging
 
-from app.api.dependencies import get_analysis_service
+from app.api.dependencies import get_analysis_service, get_orchestrator_service
 from app.models.domain.user import User
 from app.services.analysis_service import AnalysisService
 from app.services.analysis_orchestrator import AnalysisOrchestrator
@@ -12,6 +14,8 @@ from app.core.exceptions import NotFoundException
 from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
+
+logger = logging.getLogger(__name__)
 
 
 @router.get("/{analysis_id}", response_model=AnalysisRead, summary="Get analysis by ID")
@@ -37,34 +41,58 @@ async def get_analysis(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-@router.get("/claim/{claim_id}/stream", response_class=StreamingResponse, summary="Stream claim analysis")
+@router.get("/claim/{claim_id}/stream", response_class=StreamingResponse)
 async def stream_claim_analysis(
     claim_id: UUID,
-    # current_data: tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    analysis_orchestrator: AnalysisOrchestrator = Depends(get_analysis_service),
+    analysis_orchestrator: AnalysisOrchestrator = Depends(get_orchestrator_service),
 ) -> StreamingResponse:
-    """
-    Stream the analysis process for a claim in real-time.
+    """Stream the analysis process for a claim in real-time."""
 
-    The stream will include:
-    1. Source gathering status
-    2. LLM analysis progress
-    3. Final analysis results
-    """
     # fake user for now
-    user = User(id=UUID("00000000-0000-0000-0000-000000000000"), email="bob@test.com")
+    user = User(
+        id=UUID("00000000-0000-0000-0000-000000000000"),
+        email="bob@test.com",
+        auth0_id="auth0|1234567890",
+        username="bob",
+        is_active=True,
+        last_login=None,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
 
     async def event_generator():
         try:
+            logger.info(f"Starting analysis stream for claim {claim_id}")
+
+            # First yield a status message
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Initializing analysis...'})}\n\n"
+
             async for event in analysis_orchestrator.analyze_claim_stream(claim_id=claim_id, user_id=user.id):
                 if isinstance(event, dict):
+                    logger.debug(f"Streaming event: {event}")
                     yield f"data: {json.dumps(event)}\n\n"
+
         except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            logger.error(f"Error in analysis stream: {str(e)}", exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
         finally:
+            logger.info(f"Ending analysis stream for claim {claim_id}")
             yield "data: [DONE]\n\n"
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    )
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/claim/{claim_id}", response_model=List[AnalysisRead], summary="Get claim analyses")

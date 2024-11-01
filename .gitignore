@@ -8,3 +8,4 @@ __pycache__/
 *.log
 .mypy_cache/
 infrastructure/terraform/.terraform
+service-account.json

@@ -31,10 +31,3 @@ class MessageRepositoryInterface(ABC):
     ) -> List[Message]:
         """Get messages for a claim conversation with pagination."""
         pass
-
-    @abstractmethod
-    async def get_user_messages(
-        self, user_id: UUID, before: Optional[datetime] = None, limit: int = 50
-    ) -> List[Message]:
-        """Get messages for a user with pagination."""
-        pass

@@ -1,6 +1,6 @@
 from typing import Optional, List
 from uuid import UUID
-from datetime import datetime
+from datetime import UTC, datetime
 from sqlalchemy import select, and_, desc
 
 from app.models.database.models import ConversationModel, ConversationStatus
@@ -52,18 +52,18 @@ class ConversationRepository(BaseRepository[ConversationModel, Conversation], Co
         conversation = await self.get(conversation_id)
         if conversation:
             conversation.status = status
-            if status == ConversationStatus.COMPLETED:
-                conversation.end_time = datetime.utcnow()
+            if status == ConversationStatus.completed:
+                conversation.end_time = datetime.now(UTC)
             return await self.update(conversation)
         return None
 
     async def get_active_conversation(self, user_id: UUID) -> Optional[Conversation]:
         query = select(self._model_class).where(
-            and_(self._model_class.user_id == user_id, self._model_class.status == ConversationStatus.ACTIVE)
+            and_(self._model_class.user_id == user_id, self._model_class.status == ConversationStatus.active)
         )
         result = await self._session.execute(query)
         model = result.scalar_one_or_none()
         return self._to_domain(model) if model else None
 
     async def end_conversation(self, conversation_id: UUID) -> Optional[Conversation]:
-        return await self.update_status(conversation_id, ConversationStatus.COMPLETED)
+        return await self.update_status(conversation_id, ConversationStatus.completed)
