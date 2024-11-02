@@ -62,9 +62,7 @@ def upgrade() -> None:
             "ck_analysis_confidence_score_range", "analysis", "confidence_score >= 0 AND confidence_score <= 1"
         )
 
-    # Now handle the sources table relationships
     if table_exists("sources"):
-        # Get existing constraints
         insp = inspect(conn)
         constraints = insp.get_foreign_keys("sources")
 
@@ -73,12 +71,10 @@ def upgrade() -> None:
             if constraint["referred_table"] == "analysis":
                 op.drop_constraint(constraint["name"], "sources", type_="foreignkey")
 
-        # Create new foreign key
         op.create_foreign_key(
             "fk_sources_analysis_id_analysis", "sources", "analysis", ["analysis_id"], ["id"], ondelete="CASCADE"
         )
 
-        # Add check constraint if it doesn't exist
         try:
             op.create_check_constraint(
                 "ck_sources_credibility_score_range", "sources", "credibility_score >= 0 AND credibility_score <= 1"

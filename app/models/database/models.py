@@ -126,7 +126,7 @@ class AnalysisModel(Base):
     confidence_score: Mapped[float] = mapped_column(nullable=False)
     analysis_text: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[AnalysisStatus] = mapped_column(
-        SQLEnum(AnalysisStatus),
+        SQLEnum(AnalysisStatus, name="analysis_status"),
         default=AnalysisStatus.pending,
         nullable=False,
         index=True,

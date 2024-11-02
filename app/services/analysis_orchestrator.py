@@ -79,14 +79,13 @@ class AnalysisOrchestrator:
                     )
                     scores = json.loads(scores_response.text)
 
-                    # Create the analysis
                     analysis = Analysis(
                         id=uuid4(),
                         claim_id=self._analysis_state.current_claim.id,
                         veracity_score=float(scores["veracity_score"]),
                         confidence_score=float(scores["confidence_score"]),
                         analysis_text=full_text,
-                        status=AnalysisStatus.COMPLETED.value,
+                        status=AnalysisStatus.completed.value,
                         created_at=datetime.now(UTC),
                         updated_at=datetime.now(UTC),
                     )
