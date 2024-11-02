@@ -3,10 +3,14 @@ import os
 from typing import Optional
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
     DATABASE_URL: Optional[str] = None
+    DATABASE_PASSWORD: Optional[str] = None
     POSTGRES_USER: str = "will"
     POSTGRES_PASSWORD: str = "nordai123"
     POSTGRES_DB: str = "mitigation_misinformation_db"
@@ -23,31 +27,50 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._log_debug_info()
+        if self.DEBUG:
+            self._log_debug_info()
 
     def _log_debug_info(self) -> None:
         """Log debug information about configuration"""
+
+        # Safely mask credentials in URLs for logging
+        def mask_password_in_url(url: str) -> str:
+            if not url:
+                return "None"
+            try:
+                from urllib.parse import urlparse, urlunparse
+
+                parsed = urlparse(url)
+                if "@" in parsed.netloc:
+                    userpass, host = parsed.netloc.rsplit("@", 1)
+                    if ":" in userpass:
+                        user, _ = userpass.split(":", 1)
+                        masked_netloc = f"{user}:****@{host}"
+                        parsed = parsed._replace(netloc=masked_netloc)
+                return urlunparse(parsed)
+            except Exception as e:
+                logger.error(f"Error masking URL: {e}")
+                return "Error masking URL"
+
         print("\n=== Configuration Debug Information ===")
         print(f"Current working directory: {os.getcwd()}")
         print(f"Environment file location: {os.path.join(os.getcwd(), '.env')}")
         print("\nEnvironment variables loaded:")
-        print(f"DATABASE_URL: {self.DATABASE_URL}")
-        print(f"POSTGRES_USER: {self.POSTGRES_USER}")
-        print(f"POSTGRES_PASSWORD: {'*' * len(self.POSTGRES_PASSWORD) if self.POSTGRES_PASSWORD else 'None'}")
-        print(f"POSTGRES_HOST: {self.POSTGRES_HOST}")
-        print(f"POSTGRES_DB: {self.POSTGRES_DB}")
+        print(f"DATABASE_URL: {mask_password_in_url(self.DATABASE_URL)}")
+        print(f"Using Direct DB URL: {bool(self.DATABASE_URL)}")
         print(f"VERTEX_AI_LOCATION: {self.VERTEX_AI_LOCATION}")
         print(f"VERTEX_AI_ENDPOINT_ID: {self.VERTEX_AI_ENDPOINT_ID}")
         print(f"GOOGLE_CLOUD_PROJECT: {self.GOOGLE_CLOUD_PROJECT}")
         print(f"LLAMA_MODEL_NAME: {self.LLAMA_MODEL_NAME}")
-        print(f"Sync Database URL: {self.get_sync_database_url}")
-        print(f"Async Database URL: {self.get_async_database_url}")
         print("=====================================\n")
 
     @property
     def get_sync_database_url(self) -> str:
         """Get synchronous database URL for migrations"""
         if self.DATABASE_URL:
+            # Make sure it's using the postgresql:// prefix
+            if self.DATABASE_URL.startswith("postgresql+asyncpg://"):
+                return self.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
             return self.DATABASE_URL
 
         return (
@@ -60,16 +83,10 @@ class Settings(BaseSettings):
     @property
     def get_async_database_url(self) -> str:
         """Get async database URL for application"""
-        if self.DATABASE_URL:
-            # Convert standard URL to async URL
-            return self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
-
-        return (
-            f"postgresql+asyncpg://"
-            f"{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@"
-            f"{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/"
-            f"{self.POSTGRES_DB}"
-        )
+        sync_url = self.get_sync_database_url
+        if sync_url.startswith("postgresql://"):
+            return sync_url.replace("postgresql://", "postgresql+asyncpg://")
+        return sync_url
 
     class Config:
         env_file = ".env"
