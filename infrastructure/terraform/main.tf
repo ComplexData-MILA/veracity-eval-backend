@@ -94,14 +94,36 @@ resource "google_container_cluster" "primary" {
 }
 
 resource "google_container_node_pool" "primary_nodes" {
-  name       = "misinformation-mitigation-node-pool"
-  location   = "${var.region}-a"
-  cluster    = google_container_cluster.primary.name
-  node_count = 1
+  name     = "misinformation-mitigation-node-pool"
+  location = "${var.region}-a"
+  cluster  = google_container_cluster.primary.name
+
+  initial_node_count = 1
+
+  autoscaling {
+    min_node_count = 1
+    max_node_count = 3
+  }
+
+  upgrade_settings {
+    max_surge       = 1
+    max_unavailable = 0
+    strategy        = "SURGE"
+  }
+
+  management {
+    auto_repair  = true
+    auto_upgrade = true
+  }
 
   node_config {
     preemptible  = false
     machine_type = "e2-medium"
+
+    labels = {
+      environment = "production",
+      app         = "misinformation-mitigation"
+    }
 
     service_account = google_service_account.gke_sa.email
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
