@@ -25,7 +25,7 @@ class Claim:
             user_id=model.user_id,
             claim_text=model.claim_text,
             context=model.context,
-            status=model.status.value,
+            status=ClaimStatus(model.status),
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -37,5 +37,5 @@ class Claim:
             user_id=self.user_id,
             claim_text=self.claim_text,
             context=self.context,
-            status=ClaimStatus(self.status),
+            status=ClaimStatus(self.status).value,
         )

@@ -1,29 +1,33 @@
-from typing import Generator
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 
-engine = create_engine(
-    settings.DATABASE_URL, pool_pre_ping=True, pool_size=20, max_overflow=10, pool_timeout=30, pool_recycle=1800
+# Create async engine
+engine = create_async_engine(
+    settings.get_async_database_url,
+    echo=settings.DEBUG,
+    future=True,
+    pool_pre_ping=True,
+    pool_size=20,
+    max_overflow=10,
+    pool_timeout=30,
+    pool_recycle=1800,
 )
 
-# Create session factory
-SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+# Create async session factory
+AsyncSessionLocal = sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autocommit=False,
+    autoflush=False,
+)
 
 
-def get_session() -> Generator[Session, None, None]:
-    """
-    Get a database session.
-
-    Yields:
-        Session: The database session
-
-    Example:
-        with next(get_session()) as session:
-            result = session.query(User).all()
-    """
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
+async def get_session() -> AsyncSession:
+    """Get a database session."""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()

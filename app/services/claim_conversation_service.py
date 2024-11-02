@@ -28,7 +28,7 @@ class ClaimConversationService:
             conversation_id=conversation_id,
             claim_id=claim_id,
             start_time=datetime.now(UTC),
-            status=ConversationStatus.ACTIVE.value,
+            status=ConversationStatus.active,
         )
 
         created_claim_conv = await self._claim_conversation_repo.create(claim_conversation)

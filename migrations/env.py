@@ -16,7 +16,7 @@ config = context.config
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 settings = Settings()
-config.set_main_option("sqlalchemy.url", settings.get_database_url)
+config.set_main_option("sqlalchemy.url", settings.get_sync_database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

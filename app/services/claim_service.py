@@ -14,16 +14,24 @@ class ClaimService:
 
     async def create_claim(self, user_id: UUID, claim_text: str, context: str) -> Claim:
         """Create a new claim."""
+        now = datetime.now(UTC)
         claim = Claim(
             id=uuid4(),
             user_id=user_id,
             claim_text=claim_text,
             context=context,
-            status=ClaimStatus.PENDING.value,
-            created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC),
+            status=ClaimStatus.pending,
+            created_at=now,
+            updated_at=now,
         )
         return await self._claim_repo.create(claim)
+
+    async def update_claim_status(self, claim_id: UUID, status: ClaimStatus, user_id: UUID) -> Claim:
+        """Update claim status."""
+        claim = await self.get_claim(claim_id, user_id)
+        claim.status = status
+        claim.updated_at = datetime.now(UTC)
+        return await self._claim_repo.update(claim)
 
     async def get_claim(self, claim_id: UUID, user_id: Optional[UUID] = None) -> Claim:
         """Get a claim and optionally verify ownership."""
@@ -41,8 +49,3 @@ class ClaimService:
     ) -> Tuple[List[Claim], int]:
         """List claims for a user with pagination."""
         return await self._claim_repo.get_user_claims(user_id=user_id, status=status, limit=limit, offset=offset)
-
-    async def update_claim_status(self, claim_id: UUID, status: ClaimStatus, user_id: UUID) -> Claim:
-        """Update claim status."""
-        claim = await self.get_claim(claim_id, user_id)
-        return await self._claim_repo.update_status(claim.id, status)

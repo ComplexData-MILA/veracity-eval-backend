@@ -1,5 +1,5 @@
 from datetime import datetime, UTC
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from uuid import UUID, uuid4
 
 from app.models.database.models import AnalysisStatus
@@ -33,19 +33,37 @@ class AnalysisService:
             veracity_score=veracity_score,
             confidence_score=confidence_score,
             analysis_text=analysis_text,
-            status=AnalysisStatus.PENDING.value,
+            status=AnalysisStatus.pending,
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )
 
         return await self._analysis_repo.create(analysis)
 
-    async def get_analysis(self, analysis_id: UUID) -> Analysis:
+    async def get_analysis(
+        self, analysis_id: UUID, include_sources: bool = False, include_feedback: bool = False
+    ) -> Analysis:
         """Get analysis by ID."""
-        analysis = await self._analysis_repo.get(analysis_id)
+        if include_sources or include_feedback:
+            analysis = await self._analysis_repo.get_with_relations(analysis_id)
+        else:
+            analysis = await self._analysis_repo.get(analysis_id)
+
         if not analysis:
             raise NotFoundException("Analysis not found")
         return analysis
+
+    async def get_latest_claim_analysis(
+        self, claim_id: UUID, include_sources: bool = False, include_feedback: bool = False
+    ) -> Optional[Analysis]:
+        analyses = await self._analysis_repo.get_by_claim(
+            claim_id=claim_id,
+            include_sources=include_sources,
+            include_feedback=include_feedback,
+        )
+
+        if not analyses:
+            return None
 
     async def get_claim_analyses(
         self, claim_id: UUID, include_sources: bool = False, include_feedback: bool = False

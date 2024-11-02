@@ -1,8 +1,12 @@
-from typing import Generator
+import logging
 from fastapi import Depends
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import AsyncGenerator
 
-from app.db.session import SessionLocal
+
+from app.core.llm.vertex_ai_llama import VertexAILlamaProvider
+from app.db.session import get_session
 from app.repositories.implementations.claim_conversation_repository import ClaimConversationRepository
 from app.repositories.implementations.user_repository import UserRepository
 from app.repositories.implementations.claim_repository import ClaimRepository
@@ -12,7 +16,8 @@ from app.repositories.implementations.conversation_repository import Conversatio
 from app.repositories.implementations.domain_repository import DomainRepository
 from app.repositories.implementations.source_repository import SourceRepository
 from app.repositories.implementations.feedback_repository import FeedbackRepository
-
+from app.core.config import settings
+from app.services.analysis_orchestrator import AnalysisOrchestrator
 from app.services.claim_conversation_service import ClaimConversationService
 from app.services.user_service import UserService
 from app.services.claim_service import ClaimService
@@ -23,20 +28,13 @@ from app.services.domain_service import DomainService
 from app.services.source_service import SourceService
 from app.services.feedback_service import FeedbackService
 
+logger = logging.getLogger(__name__)
 
-# Database Session Dependency
-def get_db() -> Generator[Session, None, None]:
-    """
-    FastAPI dependency that provides a database session.
 
-    Yields:
-        Session: The database session
-    """
-    session = SessionLocal()
-    try:
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """Database session dependency"""
+    async for session in get_session():
         yield session
-    finally:
-        session.close()
 
 
 # Repository Dependencies
@@ -83,9 +81,8 @@ async def get_user_service(user_repository: UserRepository = Depends(get_user_re
 
 async def get_claim_service(
     claim_repository: ClaimRepository = Depends(get_claim_repository),
-    analysis_service: AnalysisService = Depends(lambda: get_analysis_service()),
 ) -> ClaimService:
-    return ClaimService(claim_repository, analysis_service)
+    return ClaimService(claim_repository)
 
 
 async def get_claim_conversation_service(
@@ -97,9 +94,9 @@ async def get_claim_conversation_service(
 
 async def get_analysis_service(
     analysis_repository: AnalysisRepository = Depends(get_analysis_repository),
-    source_service: SourceService = Depends(lambda: get_source_service()),
+    claim_repository: ClaimRepository = Depends(get_claim_repository),
 ) -> AnalysisService:
-    return AnalysisService(analysis_repository, source_service)
+    return AnalysisService(analysis_repository, claim_repository)
 
 
 async def get_message_service(
@@ -131,3 +128,32 @@ async def get_feedback_service(
     feedback_repository: FeedbackRepository = Depends(get_feedback_repository),
 ) -> FeedbackService:
     return FeedbackService(feedback_repository)
+
+
+async def get_llm_provider():
+    """Get configured LLM provider."""
+    try:
+        provider = VertexAILlamaProvider(settings)
+        return provider
+    except Exception as e:
+        logger.error(f"Failed to initialize LLM provider: {str(e)}", exc_info=True)
+        raise
+
+
+async def get_orchestrator_service(
+    claim_repository: ClaimRepository = Depends(get_claim_repository),
+    analysis_repository: AnalysisRepository = Depends(get_analysis_repository),
+    conversation_repository: ConversationRepository = Depends(get_conversation_repository),
+    message_repository: MessageRepository = Depends(get_message_repository),
+    llm_provider=Depends(get_llm_provider),
+) -> AnalysisOrchestrator:
+    """Get a configured AnalysisOrchestrator instance."""
+    llm_provider = VertexAILlamaProvider(settings)
+
+    return AnalysisOrchestrator(
+        llm_provider=llm_provider,
+        claim_repo=claim_repository,
+        analysis_repo=analysis_repository,
+        conversation_repo=conversation_repository,
+        message_repo=message_repository,
+    )

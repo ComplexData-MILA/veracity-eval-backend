@@ -2,42 +2,52 @@ import enum
 from datetime import UTC, datetime
 from typing import Optional, List
 import uuid
-from sqlalchemy import UUID, CheckConstraint, Float, Index, String, Boolean, Text, Enum as SQLEnum, ForeignKey, text
+from sqlalchemy import (
+    UUID,
+    CheckConstraint,
+    DateTime,
+    Float,
+    Index,
+    String,
+    Boolean,
+    Text,
+    Enum as SQLEnum,
+    ForeignKey,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 
 from app.models.database.base import Base
 
 
 class ConversationStatus(str, enum.Enum):
-    ACTIVE = "active"
-    PAUSED = "paused"
-    COMPLETED = "completed"
-    ARCHIVED = "archived"
+    active = "active"
+    paused = "paused"
+    completed = "completed"
+    archived = "archived"
 
 
 class MessageSenderType(str, enum.Enum):
-    USER = "user"
-    BOT = "bot"
-    SYSTEM = "system"
+    user = "user"
+    bot = "bot"
+    system = "system"
 
 
 class ClaimStatus(str, enum.Enum):
-    PENDING = "pending"
-    ANALYZING = "analyzing"
-    ANALYZED = "analyzed"
-    DISPUTED = "disputed"
-    VERIFIED = "verified"
-    REJECTED = "rejected"
+    pending = "pending"
+    analyzing = "analyzing"
+    analyzed = "analyzed"
+    disputed = "disputed"
+    verified = "verified"
+    rejected = "rejected"
 
 
 class AnalysisStatus(str, enum.Enum):
-
-    PENDING = "pending"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    DISPUTED = "disputed"
+    pending = "pending"
+    processing = "processing"
+    completed = "completed"
+    failed = "failed"
+    disputed = "disputed"
 
 
 class UserModel(Base):
@@ -45,7 +55,7 @@ class UserModel(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    last_login: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    last_login: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Relationships
     claims: Mapped[List["ClaimModel"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     conversations: Mapped[List["ConversationModel"]] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -67,10 +77,12 @@ class ConversationModel(Base):
 
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    start_time: Mapped[datetime] = mapped_column(default=datetime.now(UTC), nullable=False)
-    end_time: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    start_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    end_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[ConversationStatus] = mapped_column(
-        SQLEnum(ConversationStatus), default=ConversationStatus.ACTIVE, nullable=False, index=True
+        SQLEnum(ConversationStatus), default=ConversationStatus.active, nullable=False, index=True
     )
 
     # Relationships
@@ -92,8 +104,9 @@ class ClaimModel(Base):
 
     claim_text: Mapped[str] = mapped_column(Text, nullable=False)
     context: Mapped[str] = mapped_column(Text, nullable=False)
+    # always lowercase
     status: Mapped[ClaimStatus] = mapped_column(
-        SQLEnum(ClaimStatus), default=ClaimStatus.PENDING, nullable=False, index=True
+        SQLEnum(ClaimStatus, name="claim_status"), default=ClaimStatus.pending, nullable=False
     )
 
     # Relationships
@@ -102,19 +115,19 @@ class ClaimModel(Base):
     claim_conversations: Mapped[List["ClaimConversationModel"]] = relationship(
         back_populates="claim", cascade="all, delete-orphan"
     )
-    messages: Mapped[List["MessageModel"]] = relationship(
-        back_populates="claim", cascade="all, delete-orphan", doc="Messages referencing this claim"
-    )
+    messages: Mapped[List["MessageModel"]] = relationship(back_populates="claim", cascade="all, delete-orphan")
 
 
 class AnalysisModel(Base):
+    __tablename__ = "analysis"
+
     claim_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("claims.id"), nullable=False, index=True)
     veracity_score: Mapped[float] = mapped_column(nullable=False)
     confidence_score: Mapped[float] = mapped_column(nullable=False)
     analysis_text: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[AnalysisStatus] = mapped_column(
-        SQLEnum(AnalysisStatus),
-        default=AnalysisStatus.PENDING,
+        SQLEnum(AnalysisStatus, name="analysis_status"),
+        default=AnalysisStatus.pending,
         nullable=False,
         index=True,
     )
@@ -133,12 +146,13 @@ class AnalysisModel(Base):
 
 
 class SourceModel(Base):
+    __tablename__ = "sources"
+
     analysis_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("analysis.id"),
+        ForeignKey("analysis.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
-        doc="Reference to the analysis using this source",
     )
 
     url: Mapped[str] = mapped_column(String(2048), nullable=False)
@@ -195,10 +209,12 @@ class ClaimConversationModel(Base):
         UUID(as_uuid=True), ForeignKey("conversations.id"), nullable=False, index=True
     )
     claim_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("claims.id"), nullable=False, index=True)
-    start_time: Mapped[datetime] = mapped_column(default=datetime.now(UTC), nullable=False)
-    end_time: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    start_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    end_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[ConversationStatus] = mapped_column(
-        SQLEnum(ConversationStatus), default=ConversationStatus.ACTIVE, nullable=False, index=True
+        SQLEnum(ConversationStatus), default=ConversationStatus.active, nullable=False, index=True
     )
 
     # Relationships
@@ -218,7 +234,9 @@ class MessageModel(Base):
     )
     sender_type: Mapped[MessageSenderType] = mapped_column(SQLEnum(MessageSenderType), nullable=False, index=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    timestamp: Mapped[datetime] = mapped_column(default=datetime.now(UTC), nullable=False, index=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
     claim_id: Mapped[Optional[UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("claims.id"), nullable=True, index=True
     )
