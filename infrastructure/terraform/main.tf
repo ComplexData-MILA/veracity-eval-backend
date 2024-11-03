@@ -259,6 +259,10 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
         labels = {
           app = "misinformation-mitigation-api"
         }
+
+        annotations = {
+          "timestamp" = timestamp() // Force redeployment
+        }
       }
 
       spec {
@@ -272,6 +276,18 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
             name  = "DATABASE_URL"
             value = "postgresql://misinformation_mitigation_user:${var.db_password}@127.0.0.1:5432/misinformation_mitigation_db"
           }
+
+          env {
+            name  = "GOOGLE_APPLICATION_CREDENTIALS"
+            value = "/app/service-account.json"
+          }
+
+          volume_mount {
+            name       = "service-account-key"
+            mount_path = "/app/service-account.json"
+            sub_path   = "service-account.json"
+          }
+
 
           port {
             container_port = 8001
@@ -298,6 +314,17 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
 
           security_context {
             run_as_non_root = true
+          }
+        }
+
+        volume {
+          name = "service-account-key"
+          secret {
+            secret_name = "vertex-ai-credentials"
+            items {
+              key  = "service-account.json"
+              path = "service-account.json"
+            }
           }
         }
       }

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     POSTGRES_PORT: str = "5432"
     VERTEX_AI_LOCATION: str = "us-central1"
     VERTEX_AI_ENDPOINT_ID: str = "us-central1-aiplatform.googleapis.com"
-    GOOGLE_CLOUD_PROJECT: str = "mitigation-misinformation"
+    GOOGLE_CLOUD_PROJECT: str = "misinformation-mitigation"
     GOOGLE_APPLICATION_CREDENTIALS: str = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "service-account.json"
     )

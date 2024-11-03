@@ -11,8 +11,10 @@ logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(leve
 
 app.add_middleware(
     CORSMiddleware,
-    # TODO(wgarneau): Eventually add only the front-end url
-    allow_origins=["*"],
+    allow_origins=[
+        "https://misinformation-mitigation-ui.vercel.app",
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

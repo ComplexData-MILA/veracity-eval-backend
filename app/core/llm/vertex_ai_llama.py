@@ -1,3 +1,5 @@
+import base64
+import json
 import logging
 import os
 from typing import AsyncGenerator, List
@@ -15,21 +17,42 @@ logger = logging.getLogger(__name__)
 class VertexAILlamaProvider(LLMProvider):
     def __init__(self, settings):
         try:
-            logger.info(f"Loading service account from: {settings.GOOGLE_APPLICATION_CREDENTIALS}")
+            creds_path = settings.GOOGLE_APPLICATION_CREDENTIALS
+            logger.info(f"Loading service account from: {creds_path}")
 
-            if not os.path.exists(settings.GOOGLE_APPLICATION_CREDENTIALS):
-                raise FileNotFoundError(f"Service account file not found at: {settings.GOOGLE_APPLICATION_CREDENTIALS}")
+            if not os.path.exists(creds_path):
+                raise FileNotFoundError(f"Service account file not found at: {creds_path}")
 
-            # Initialize credentials
+            try:
+                with open(creds_path, "r") as f:
+                    creds_content = json.loads(f.read())
+                    logger.info(f"Using service account: {creds_content.get('client_email')}")
+                    logger.info(f"Project ID from creds: {creds_content.get('project_id')}")
+                logger.info("Successfully loaded service account as JSON")
+            except json.JSONDecodeError:
+                logger.info("File is not JSON, attempting base64 decode")
+                with open(creds_path, "r") as f:
+                    base64_content = f.read()
+                    try:
+                        decoded_content = base64.b64decode(base64_content)
+                        creds_content = json.loads(decoded_content)
+                        logger.info(f"Using service account (after base64): {creds_content.get('client_email')}")
+                        logger.info(f"Project ID from creds (after base64): {creds_content.get('project_id')}")
+                        with open(creds_path, "w") as f:
+                            json.dump(creds_content, f)
+
+                        logger.info("Successfully decoded base64 content to JSON")
+                    except Exception as e:
+                        logger.error(f"Failed to decode base64 content: {str(e)}")
+                        raise
+
             self.credentials = service_account.Credentials.from_service_account_file(
-                settings.GOOGLE_APPLICATION_CREDENTIALS, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                creds_path, scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
 
-            # Get initial access token
             auth_req = requests.Request()
             self.credentials.refresh(auth_req)
 
-            # Configure base URL correctly for OpenAI client
             project_path = f"projects/{settings.GOOGLE_CLOUD_PROJECT}"
             location_path = f"locations/{settings.VERTEX_AI_LOCATION}"
             base_url = (
@@ -45,7 +68,6 @@ class VertexAILlamaProvider(LLMProvider):
                 default_headers={"Authorization": f"Bearer {self.credentials.token}"},
             )
 
-            # Store configuration
             self.model_id = settings.LLAMA_MODEL_NAME
             self.safety_settings = {
                 "enabled": True,
@@ -57,9 +79,6 @@ class VertexAILlamaProvider(LLMProvider):
             logger.info(f"Project: {settings.GOOGLE_CLOUD_PROJECT}")
             logger.info(f"Location: {settings.VERTEX_AI_LOCATION}")
 
-        except FileNotFoundError as e:
-            logger.error(f"Service account file error: {str(e)}", exc_info=True)
-            raise
         except Exception as e:
             logger.error(f"Failed to initialize Vertex AI Llama provider: {str(e)}", exc_info=True)
             raise
