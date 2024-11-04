@@ -22,8 +22,10 @@ class Settings(BaseSettings):
     GOOGLE_APPLICATION_CREDENTIALS: str = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "service-account.json"
     )
+    GOOGLE_SEARCH_API_KEY: str = ""
+    GOOGLE_SEARCH_ENGINE_ID: str = ""
     LLAMA_MODEL_NAME: str = "meta/llama-3.1-70b-instruct-maas"
-    DEBUG: bool = True
+    DEBUG: bool = False
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -33,7 +35,6 @@ class Settings(BaseSettings):
     def _log_debug_info(self) -> None:
         """Log debug information about configuration"""
 
-        # Safely mask credentials in URLs for logging
         def mask_password_in_url(url: str) -> str:
             if not url:
                 return "None"
@@ -61,6 +62,8 @@ class Settings(BaseSettings):
         print(f"VERTEX_AI_LOCATION: {self.VERTEX_AI_LOCATION}")
         print(f"VERTEX_AI_ENDPOINT_ID: {self.VERTEX_AI_ENDPOINT_ID}")
         print(f"GOOGLE_CLOUD_PROJECT: {self.GOOGLE_CLOUD_PROJECT}")
+        print(f"GOOGLE_SEARCH_ENGINE_ID: {self.GOOGLE_SEARCH_ENGINE_ID}")
+        print(f"Google Search API configured: {bool(self.GOOGLE_SEARCH_API_KEY)}")
         print(f"LLAMA_MODEL_NAME: {self.LLAMA_MODEL_NAME}")
         print("=====================================\n")
 

@@ -19,6 +19,8 @@ from app.repositories.implementations.feedback_repository import FeedbackReposit
 from app.core.config import settings
 from app.services.analysis_orchestrator import AnalysisOrchestrator
 from app.services.claim_conversation_service import ClaimConversationService
+from app.services.implementations.web_search_service import GoogleWebSearchService
+from app.services.interfaces.web_search_service import WebSearchServiceInterface
 from app.services.user_service import UserService
 from app.services.claim_service import ClaimService
 from app.services.analysis_service import AnalysisService
@@ -140,20 +142,32 @@ async def get_llm_provider():
         raise
 
 
+async def get_web_search_service(
+    domain_service: DomainService = Depends(get_domain_service),
+    source_repository: SourceRepository = Depends(get_source_repository),
+) -> WebSearchServiceInterface:
+    """Get a configured WebSearchService"""
+    return GoogleWebSearchService(domain_service, source_repository)
+
+
 async def get_orchestrator_service(
     claim_repository: ClaimRepository = Depends(get_claim_repository),
     analysis_repository: AnalysisRepository = Depends(get_analysis_repository),
     conversation_repository: ConversationRepository = Depends(get_conversation_repository),
     message_repository: MessageRepository = Depends(get_message_repository),
+    source_repository: SourceRepository = Depends(get_source_repository),
+    web_search_service: WebSearchServiceInterface = Depends(get_web_search_service),
     llm_provider=Depends(get_llm_provider),
 ) -> AnalysisOrchestrator:
     """Get a configured AnalysisOrchestrator instance."""
     llm_provider = VertexAILlamaProvider(settings)
 
     return AnalysisOrchestrator(
-        llm_provider=llm_provider,
         claim_repo=claim_repository,
         analysis_repo=analysis_repository,
         conversation_repo=conversation_repository,
         message_repo=message_repository,
+        source_repo=source_repository,
+        web_search_service=web_search_service,
+        llm_provider=llm_provider,
     )

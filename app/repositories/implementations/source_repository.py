@@ -1,73 +1,56 @@
-from typing import List, Tuple
+from typing import Optional, List
 from uuid import UUID
-from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.database.models import SourceModel
 from app.models.domain.source import Source
 from app.repositories.base import BaseRepository
-from app.repositories.interfaces.source_repository import SourceRepositoryInterface
+from app.models.database.models import SourceModel
 
 
-class SourceRepository(BaseRepository[SourceModel, Source], SourceRepositoryInterface):
+class SourceRepository(BaseRepository[SourceModel, Source]):
     def __init__(self, session: AsyncSession):
         super().__init__(session, SourceModel)
 
-    def _to_model(self, source: Source) -> SourceModel:
-        return SourceModel(
-            id=source.id,
-            analysis_id=source.analysis_id,
-            url=source.url,
-            title=source.title,
-            snippet=source.snippet,
-            domain_id=source.domain_id,
-            content=source.content,
-            credibility_score=source.credibility_score,
+    async def get_by_url(self, url: str) -> Optional[SourceModel]:
+        """Get a source by its URL."""
+        query = (
+            select(self._model_class)
+            .where(self._model_class.url == url)
+            .options(selectinload(self._model_class.domain))
         )
+        result = await self._session.execute(query)
+        return result.scalar_one_or_none()
 
-    def _to_domain(self, model: SourceModel) -> Source:
-        return Source(
-            id=model.id,
-            analysis_id=model.analysis_id,
-            url=model.url,
-            title=model.title,
-            snippet=model.snippet,
-            domain_id=model.domain_id,
-            content=model.content,
-            credibility_score=model.credibility_score,
-            created_at=model.created_at,
-            updated_at=model.updated_at,
-        )
-
-    async def get_by_analysis(self, analysis_id: UUID, include_content: bool = False) -> List[Source]:
-        """Get all sources for an analysis."""
+    async def get_by_analysis(self, analysis_id: UUID, include_domain: bool = False) -> List[SourceModel]:
+        """Get sources for an analysis."""
         query = select(self._model_class).where(self._model_class.analysis_id == analysis_id)
 
-        if include_content:
+        if include_domain:
             query = query.options(selectinload(self._model_class.domain))
 
         result = await self._session.execute(query)
-        return [self._to_domain(model) for model in result.scalars().all()]
+        return list(result.scalars().all())
 
-    async def get_by_domain(self, domain_id: UUID, limit: int = 50, offset: int = 0) -> Tuple[List[Source], int]:
-        """Get sources from a specific domain."""
-        # Get total count
-        count_query = (
-            select(func.count()).select_from(self._model_class).where(self._model_class.domain_id == domain_id)
-        )
-        total = await self._session.scalar(count_query)
+    async def create_with_domain(self, source: SourceModel) -> Optional[SourceModel]:
+        """Create a source with its domain relationship."""
+        try:
+            self._session.add(source)
+            await self._session.flush()
+            await self._session.refresh(source, ["domain"])
+            await self._session.commit()
+            return source
+        except Exception as e:
+            await self._session.rollback()
+            raise e
 
-        # Get paginated results
-        query = (
-            select(self._model_class)
-            .where(self._model_class.domain_id == domain_id)
-            .order_by(self._model_class.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
-
-        result = await self._session.execute(query)
-        sources = [self._to_domain(model) for model in result.scalars().all()]
-
-        return sources, total
+    async def update(self, source: SourceModel) -> SourceModel:
+        """Update a source."""
+        try:
+            merged = await self._session.merge(source)
+            await self._session.commit()
+            return merged
+        except Exception as e:
+            await self._session.rollback()
+            raise e

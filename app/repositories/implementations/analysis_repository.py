@@ -53,11 +53,14 @@ class AnalysisRepository(BaseRepository[AnalysisModel, Analysis]):
         return self._to_domain(model)
 
     async def get_with_relations(self, analysis_id: UUID) -> Optional[Analysis]:
-        """Explicitly get analysis with relationships."""
+        """Get analysis with related sources and feedback."""
         query = (
             select(self._model_class)
-            .options(selectinload(self._model_class.sources), selectinload(self._model_class.feedback))
             .where(self._model_class.id == analysis_id)
+            .options(
+                selectinload(self._model_class.sources),
+                selectinload(self._model_class.feedbacks),
+            )
         )
 
         result = await self._session.execute(query)
@@ -66,18 +69,10 @@ class AnalysisRepository(BaseRepository[AnalysisModel, Analysis]):
         if not model:
             return None
 
-        return Analysis(
-            id=model.id,
-            claim_id=model.claim_id,
-            veracity_score=model.veracity_score,
-            confidence_score=model.confidence_score,
-            analysis_text=model.analysis_text,
-            status=model.status.value,
-            created_at=model.created_at,
-            updated_at=model.updated_at,
-            sources=[Source.from_model(s) for s in model.sources] if model.sources else None,
-            feedback=[Feedback.from_model(f) for f in model.feedback] if model.feedback else None,
-        )
+        # Ensure relationships are loaded
+        self._session.expunge(model)
+
+        return model
 
     async def get_by_claim(
         self, claim_id: UUID, include_sources: bool = False, include_feedback: bool = False

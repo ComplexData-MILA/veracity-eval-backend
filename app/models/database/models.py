@@ -56,10 +56,9 @@ class UserModel(Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     last_login: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    # Relationships
     claims: Mapped[List["ClaimModel"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     conversations: Mapped[List["ConversationModel"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    feedback: Mapped[List["FeedbackModel"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    feedbacks: Mapped[List["FeedbackModel"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 class DomainModel(Base):
@@ -85,7 +84,6 @@ class ConversationModel(Base):
         SQLEnum(ConversationStatus), default=ConversationStatus.active, nullable=False, index=True
     )
 
-    # Relationships
     user: Mapped["UserModel"] = relationship(back_populates="conversations")
     messages: Mapped[List["MessageModel"]] = relationship(back_populates="conversation", cascade="all, delete-orphan")
     claim_conversations: Mapped[List["ClaimConversationModel"]] = relationship(
@@ -104,12 +102,10 @@ class ClaimModel(Base):
 
     claim_text: Mapped[str] = mapped_column(Text, nullable=False)
     context: Mapped[str] = mapped_column(Text, nullable=False)
-    # always lowercase
     status: Mapped[ClaimStatus] = mapped_column(
         SQLEnum(ClaimStatus, name="claim_status"), default=ClaimStatus.pending, nullable=False
     )
 
-    # Relationships
     user: Mapped["UserModel"] = relationship(back_populates="claims")
     analyses: Mapped[List["AnalysisModel"]] = relationship(back_populates="claim", cascade="all, delete-orphan")
     claim_conversations: Mapped[List["ClaimConversationModel"]] = relationship(
@@ -132,14 +128,16 @@ class AnalysisModel(Base):
         index=True,
     )
 
-    # Relationships
     claim: Mapped["ClaimModel"] = relationship(back_populates="analyses", doc="Related claim")
     sources: Mapped[List["SourceModel"]] = relationship(back_populates="analysis", cascade="all, delete-orphan")
-    feedback: Mapped[List["FeedbackModel"]] = relationship(back_populates="analysis", cascade="all, delete-orphan")
-    messages: Mapped[List["MessageModel"]] = relationship(back_populates="analysis", cascade="all, delete-orphan")
+    feedbacks: Mapped[List["FeedbackModel"]] = relationship(
+        back_populates="analysis",
+        cascade="all, delete-orphan",
+        primaryjoin="FeedbackModel.analysis_id == AnalysisModel.id",
+    )
+    messages: Mapped[List["MessageModel"]] = relationship(back_populates="analysis", doc="Related analysis, if any")
 
     __table_args__ = (
-        # Ensure scores are between 0 and 1
         CheckConstraint("veracity_score >= 0 AND veracity_score <= 1", name="check_veracity_score_range"),
         CheckConstraint("confidence_score >= 0 AND confidence_score <= 1", name="check_confidence_score_range"),
     )
@@ -167,20 +165,23 @@ class SourceModel(Base):
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     credibility_score: Mapped[float] = mapped_column(Float, nullable=False)
 
-    # Relationships
     analysis: Mapped["AnalysisModel"] = relationship(back_populates="sources")
-    domain: Mapped[Optional["DomainModel"]] = relationship()
+    domain: Mapped[Optional["DomainModel"]] = relationship(
+        "DomainModel",
+        lazy="joined",
+    )
 
     __table_args__ = (
         CheckConstraint(
             "credibility_score >= 0 AND credibility_score <= 1", name="check_source_credibility_score_range"
         ),
-        # Indexes for common queries
         Index("idx_source_url_hash", text("md5(url)"), unique=True),
     )
 
 
 class FeedbackModel(Base):
+    __tablename__ = "feedback"
+
     analysis_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("analysis.id"),
@@ -192,14 +193,16 @@ class FeedbackModel(Base):
     rating: Mapped[float] = mapped_column(nullable=False)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # Relationships
-    analysis: Mapped["AnalysisModel"] = relationship(back_populates="feedback", doc="Related analysis")
-    user: Mapped["UserModel"] = relationship(back_populates="feedback")
+    analysis: Mapped["AnalysisModel"] = relationship(
+        "AnalysisModel",
+        back_populates="feedbacks",
+        primaryjoin="FeedbackModel.analysis_id == AnalysisModel.id",
+        doc="Related analysis",
+    )
+    user: Mapped["UserModel"] = relationship("UserModel", back_populates="feedbacks")
 
     __table_args__ = (
-        # Ensure rating is between 1 and 5
         CheckConstraint("rating >= 1 AND rating <= 5", name="check_rating_range"),
-        # One feedback per user per analysis
         Index("idx_unique_user_analysis", analysis_id, user_id, unique=True),
     )
 
@@ -217,7 +220,6 @@ class ClaimConversationModel(Base):
         SQLEnum(ConversationStatus), default=ConversationStatus.active, nullable=False, index=True
     )
 
-    # Relationships
     conversation: Mapped["ConversationModel"] = relationship(back_populates="claim_conversations")
     claim: Mapped["ClaimModel"] = relationship(back_populates="claim_conversations")
     messages: Mapped[List["MessageModel"]] = relationship(
@@ -250,15 +252,10 @@ class MessageModel(Base):
         UUID(as_uuid=True), ForeignKey("claim_conversations.id"), nullable=True, index=True
     )
 
-    # Relationships
     conversation: Mapped["ConversationModel"] = relationship(back_populates="messages")
     claim: Mapped[Optional["ClaimModel"]] = relationship(back_populates="messages")
-    analysis: Mapped[Optional["AnalysisModel"]] = relationship(
-        back_populates="messages", doc="Related analysis, if any"
-    )
-    claim_conversation: Mapped[Optional["ClaimConversationModel"]] = relationship(
-        back_populates="messages", doc="Related claim conversation, if any"
-    )
+    analysis: Mapped[Optional["AnalysisModel"]] = relationship(back_populates="messages")
+    claim_conversation: Mapped[Optional["ClaimConversationModel"]] = relationship(back_populates="messages")
 
     __table_args__ = (
         Index("idx_message_conversation_timestamp", conversation_id, timestamp.desc()),

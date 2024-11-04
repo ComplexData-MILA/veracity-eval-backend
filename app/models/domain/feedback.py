@@ -8,8 +8,6 @@ from app.models.database.models import FeedbackModel
 
 @dataclass
 class Feedback:
-    """Domain model for feedback."""
-
     id: UUID
     analysis_id: UUID
     user_id: UUID
