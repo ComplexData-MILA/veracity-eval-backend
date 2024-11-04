@@ -36,7 +36,7 @@ class AnalysisRepository(BaseRepository[AnalysisModel, Analysis]):
             status=model.status.value,
             created_at=model.created_at,
             updated_at=model.updated_at,
-            sources=None,  # Don't load relationships here
+            sources=None,
             feedback=None,
         )
 
@@ -47,7 +47,6 @@ class AnalysisRepository(BaseRepository[AnalysisModel, Analysis]):
         await self._session.commit()
         await self._session.refresh(model)
 
-        # Detach the model from the session to prevent lazy loading
         self._session.expunge(model)
 
         return self._to_domain(model)
@@ -69,7 +68,6 @@ class AnalysisRepository(BaseRepository[AnalysisModel, Analysis]):
         if not model:
             return None
 
-        # Ensure relationships are loaded
         self._session.expunge(model)
 
         return model
@@ -127,7 +125,6 @@ class AnalysisRepository(BaseRepository[AnalysisModel, Analysis]):
         await self._session.commit()
         await self._session.refresh(model)
 
-        # Detach the model to prevent lazy loading
         self._session.expunge(model)
 
         return self._to_domain(model)
@@ -154,7 +151,6 @@ class AnalysisRepository(BaseRepository[AnalysisModel, Analysis]):
         if not model:
             return None
 
-        # Detach to prevent lazy loading
         self._session.expunge(model)
 
         if include_sources or include_feedback:

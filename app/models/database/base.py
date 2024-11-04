@@ -3,7 +3,7 @@ from typing import Any, Dict
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import MetaData, DateTime
-from sqlalchemy.dialects.postgresql import UUID  # Import PostgreSQL-specific UUID
+from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
 NAMING_CONVENTION = {
@@ -26,7 +26,6 @@ class Base(DeclarativeBase):
         name = cls.__name__.replace("Model", "")
         return "".join(["_" + c.lower() if c.isupper() else c for c in name]).lstrip("_").lower() + "s"
 
-    # Correct UUID type declaration
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4  # This is the correct way to specify UUID type
     )

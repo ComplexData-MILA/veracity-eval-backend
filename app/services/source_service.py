@@ -23,11 +23,9 @@ class SourceService:
         content: Optional[str] = None,
     ) -> Source:
         """Create a new source."""
-        # Extract and get/create domain
         domain_name = normalize_domain_name(url)
         domain, _ = await self._domain_service.get_or_create_domain(domain_name)
 
-        # Create source
         source = Source(
             id=uuid4(),
             analysis_id=analysis_id,

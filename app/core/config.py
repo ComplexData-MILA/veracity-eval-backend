@@ -1,4 +1,3 @@
-# app/core/config.py
 import os
 from typing import Optional
 from pydantic_settings import BaseSettings
@@ -71,7 +70,6 @@ class Settings(BaseSettings):
     def get_sync_database_url(self) -> str:
         """Get synchronous database URL for migrations"""
         if self.DATABASE_URL:
-            # Make sure it's using the postgresql:// prefix
             if self.DATABASE_URL.startswith("postgresql+asyncpg://"):
                 return self.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
             return self.DATABASE_URL

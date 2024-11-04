@@ -37,7 +37,6 @@ class ClaimRepository(BaseRepository[ClaimModel, Claim], ClaimRepositoryInterfac
         self, user_id: UUID, status: Optional[ClaimStatus] = None, limit: int = 50, offset: int = 0
     ) -> Tuple[List[Claim], int]:
         """Get claims for a user with pagination."""
-        # Build query
         query = select(self._model_class).where(self._model_class.user_id == user_id)
 
         if status:
@@ -49,7 +48,6 @@ class ClaimRepository(BaseRepository[ClaimModel, Claim], ClaimRepositoryInterfac
 
         total = await self._session.scalar(count_query)
 
-        # Get paginated results
         query = query.order_by(self._model_class.created_at.desc())
         query = query.limit(limit).offset(offset)
 

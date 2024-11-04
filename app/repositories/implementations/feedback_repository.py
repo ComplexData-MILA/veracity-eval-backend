@@ -46,13 +46,11 @@ class FeedbackRepository(BaseRepository[FeedbackModel, Feedback], FeedbackReposi
 
     async def get_by_analysis(self, analysis_id: UUID, limit: int = 50, offset: int = 0) -> Tuple[List[Feedback], int]:
         """Get feedback for an analysis with pagination."""
-        # Get total count
         count_query = (
             select(func.count()).select_from(self._model_class).where(self._model_class.analysis_id == analysis_id)
         )
         total = await self._session.scalar(count_query)
 
-        # Get paginated results
         query = (
             select(self._model_class)
             .where(self._model_class.analysis_id == analysis_id)
@@ -68,11 +66,9 @@ class FeedbackRepository(BaseRepository[FeedbackModel, Feedback], FeedbackReposi
 
     async def get_by_user(self, user_id: UUID, limit: int = 50, offset: int = 0) -> Tuple[List[Feedback], int]:
         """Get feedback from a user with pagination."""
-        # Get total count
         count_query = select(func.count()).select_from(self._model_class).where(self._model_class.user_id == user_id)
         total = await self._session.scalar(count_query)
 
-        # Get paginated results
         query = (
             select(self._model_class)
             .where(self._model_class.user_id == user_id)

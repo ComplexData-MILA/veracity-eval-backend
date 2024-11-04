@@ -34,12 +34,10 @@ logger = logging.getLogger(__name__)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Database session dependency"""
     async for session in get_session():
         yield session
 
 
-# Repository Dependencies
 async def get_user_repository(session: Session = Depends(get_db)) -> UserRepository:
     return UserRepository(session)
 
@@ -76,7 +74,6 @@ async def get_feedback_repository(session: Session = Depends(get_db)) -> Feedbac
     return FeedbackRepository(session)
 
 
-# Service Dependencies
 async def get_user_service(user_repository: UserRepository = Depends(get_user_repository)) -> UserService:
     return UserService(user_repository)
 
@@ -133,7 +130,6 @@ async def get_feedback_service(
 
 
 async def get_llm_provider():
-    """Get configured LLM provider."""
     try:
         provider = VertexAILlamaProvider(settings)
         return provider
@@ -146,7 +142,6 @@ async def get_web_search_service(
     domain_service: DomainService = Depends(get_domain_service),
     source_repository: SourceRepository = Depends(get_source_repository),
 ) -> WebSearchServiceInterface:
-    """Get a configured WebSearchService"""
     return GoogleWebSearchService(domain_service, source_repository)
 
 
@@ -159,7 +154,6 @@ async def get_orchestrator_service(
     web_search_service: WebSearchServiceInterface = Depends(get_web_search_service),
     llm_provider=Depends(get_llm_provider),
 ) -> AnalysisOrchestrator:
-    """Get a configured AnalysisOrchestrator instance."""
     llm_provider = VertexAILlamaProvider(settings)
 
     return AnalysisOrchestrator(

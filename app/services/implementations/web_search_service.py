@@ -112,7 +112,6 @@ class GoogleWebSearchService(WebSearchServiceInterface):
             )
             return await self.source_repository.create_with_domain(source)
         except IntegrityError:
-            # If we hit a race condition, try to get the existing source
             logger.warning(f"Race condition creating source for URL: {item['link']}")
             existing = await self._get_existing_source(item["link"])
             if existing:
@@ -134,7 +133,6 @@ class GoogleWebSearchService(WebSearchServiceInterface):
                 f"Excerpt: {source.snippet}",
             ]
 
-            # Only include domain info if available
             if hasattr(source, "domain") and source.domain and source.domain.description:
                 source_info.append(f"Domain Info: {source.domain.description}")
                 source_info.append(f"Domain Reliability: {'Reliable' if source.domain.is_reliable else 'Unreliable'}")

@@ -22,7 +22,6 @@ class AnalysisService:
         analysis_text: str,
     ) -> Analysis:
         """Create new analysis for a claim."""
-        # Verify claim exists
         claim = await self._claim_repo.get(claim_id)
         if not claim:
             raise NotFoundException("Claim not found")

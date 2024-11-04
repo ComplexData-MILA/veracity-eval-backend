@@ -47,17 +47,15 @@ class DomainRepository(BaseRepository[DomainModel, Domain], DomainRepositoryInte
         """Get existing domain or create new one."""
         normalized_name = normalize_domain_name(domain_name)
 
-        # Try to get existing domain
         domain = await self.get_by_name(normalized_name)
         if domain:
             return domain, False
 
-        # Create new domain with default values
         new_domain = Domain(
             id=uuid4(),
             domain_name=normalized_name,
-            credibility_score=0.5,  # Default middle score
-            is_reliable=False,  # Default to not reliable
+            credibility_score=0.5,  # TODO(wgarneau): Determine how to set this value
+            is_reliable=False,
             description=None,
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),

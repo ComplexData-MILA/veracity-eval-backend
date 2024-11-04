@@ -24,7 +24,6 @@ class MessageService:
         claim_conversation_id: Optional[UUID] = None,
     ) -> Message:
         """Create a new message."""
-        # Verify conversation ownership
         conversation = await self._conversation_repo.get(conversation_id)
         if not conversation or conversation.user_id != user_id:
             raise NotAuthorizedException("Not authorized to access this conversation")
@@ -46,7 +45,6 @@ class MessageService:
         self, conversation_id: UUID, user_id: UUID, before: Optional[datetime] = None, limit: int = 50
     ) -> List[Message]:
         """Get messages for a conversation."""
-        # Verify conversation ownership
         conversation = await self._conversation_repo.get(conversation_id)
         if not conversation or conversation.user_id != user_id:
             raise NotAuthorizedException("Not authorized to access this conversation")
@@ -64,7 +62,6 @@ class MessageService:
         )
 
         if messages:
-            # Verify ownership using first message's conversation
             conversation = await self._conversation_repo.get(messages[0].conversation_id)
             if not conversation or conversation.user_id != user_id:
                 raise NotAuthorizedException("Not authorized to access these messages")

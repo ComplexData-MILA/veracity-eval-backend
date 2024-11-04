@@ -64,7 +64,6 @@ async def stream_claim_analysis(
         try:
             logger.info(f"Starting analysis stream for claim {claim_id}")
 
-            # First yield a status message
             yield f"data: {json.dumps({'type': 'status', 'content': 'Initializing analysis...'})}\n\n"
 
             async for event in analysis_orchestrator.analyze_claim_stream(claim_id=claim_id, user_id=user.id):

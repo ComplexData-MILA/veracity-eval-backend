@@ -53,7 +53,6 @@ class AnalysisOrchestrator:
     async def _generate_analysis(self, claim_text: str, context: str) -> AsyncGenerator[Dict[str, Any], None]:
         """Generate analysis for a claim with web search and source management."""
         try:
-            # Create initial analysis record
             initial_analysis = Analysis(
                 id=uuid4(),
                 claim_id=self._analysis_state.current_claim.id,
@@ -68,7 +67,6 @@ class AnalysisOrchestrator:
 
             yield {"type": "status", "content": "Searching for relevant sources..."}
 
-            # Search and create sources
             sources = await self._web_search.search_and_create_sources(
                 claim_text=claim_text, analysis_id=current_analysis.id
             )
@@ -85,11 +83,8 @@ class AnalysisOrchestrator:
                     "type": "status",
                     "content": f"Found {len(sources)} relevant sources (overall credibility: {source_credibility:.2f})",
                 }
-
-            # Format sources for the prompt
             sources_text = self._web_search.format_sources_for_prompt(sources)
 
-            # Create the analysis prompt with sources
             prompt = (
                 "Analyze the following claim using the provided sources and context. "
                 "Consider source credibility when weighing evidence.\n\n"
@@ -111,14 +106,12 @@ class AnalysisOrchestrator:
 
             yield {"type": "status", "content": "Analyzing claim with gathered sources..."}
 
-            # Generate the analysis - FIXED: Use LLMMessage instead of Message
             analysis_text = []
             async for chunk in self._llm.generate_stream([LLMMessage(role="user", content=prompt)]):
                 if not chunk.is_complete:
                     analysis_text.append(chunk.text)
                     yield {"type": "content", "content": chunk.text}
                 else:
-                    # Create analysis record
                     full_text = "".join(analysis_text)
 
                     try:
@@ -164,10 +157,8 @@ class AnalysisOrchestrator:
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Process a user message, potentially containing a claim to analyze"""
         try:
-            # Initialize or get conversation
             conversation = await self._initialize_conversation(user_id, conversation_id)
 
-            # Store user message
             await self._store_user_message(conversation.id, content)
 
             has_claim = await self._detect_claim(content)
@@ -245,7 +236,6 @@ class AnalysisOrchestrator:
 
     async def _create_analysis(self, analysis_text: str, claim_id: UUID) -> Analysis:
         """Create analysis record from generated text"""
-        # Extract scores using LLM
         scores_prompt = (
             "Extract the veracity and confidence scores from this analysis. "
             "Respond with only a JSON object containing 'veracity_score' and "
@@ -291,22 +281,18 @@ class AnalysisOrchestrator:
         try:
             logger.info(f"Starting analysis for claim {claim_id}")
 
-            # Get the claim
             claim = await self._claim_repo.get(claim_id)
             if not claim:
                 raise ValueError(f"Claim {claim_id} not found")
 
             logger.debug(f"Retrieved claim: {claim.claim_text}")
 
-            # Update state
             self._analysis_state.current_claim = claim
 
-            # Update claim status to analyzing
             await self._claim_repo.update_status(claim_id, ClaimStatus.analyzing)
 
             yield {"type": "status", "content": "Starting analysis..."}
 
-            # Detect if it's a verifiable claim
             is_verifiable = await self._detect_claim(claim.claim_text)
             logger.debug(f"Claim verifiable check result: {is_verifiable}")
 
@@ -315,19 +301,16 @@ class AnalysisOrchestrator:
                 await self._claim_repo.update_status(claim_id, ClaimStatus.rejected)
                 return
 
-            # Generate analysis
             logger.debug("Starting analysis generation")
             async for chunk in self._generate_analysis(claim.claim_text, claim.context):
                 yield chunk
 
-            # Update claim status to analyzed
             await self._claim_repo.update_status(claim_id, ClaimStatus.analyzed)
 
             logger.info(f"Completed analysis for claim {claim_id}")
 
         except Exception as e:
             logger.error(f"Error in analyze_claim_stream: {str(e)}", exc_info=True)
-            # Update claim status to failed if there's an error
             if self._analysis_state.current_claim:
                 await self._claim_repo.update_status(claim_id, ClaimStatus.rejected)
             yield {"type": "error", "content": str(e)}

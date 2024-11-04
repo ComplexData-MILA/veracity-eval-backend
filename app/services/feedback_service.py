@@ -22,12 +22,10 @@ class FeedbackService:
         comment: Optional[str] = None,
     ) -> Feedback:
         """Create new feedback for an analysis."""
-        # Verify analysis exists
         analysis = await self._analysis_repo.get(analysis_id)
         if not analysis:
             raise NotFoundException("Analysis not found")
 
-        # Create feedback
         feedback = Feedback(
             id=uuid4(),
             analysis_id=analysis_id,
