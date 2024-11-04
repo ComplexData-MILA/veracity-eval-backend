@@ -23,15 +23,19 @@ class SourceRepository(BaseRepository[SourceModel, Source]):
         result = await self._session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_analysis(self, analysis_id: UUID, include_domain: bool = False) -> List[SourceModel]:
-        """Get sources for an analysis."""
+    async def get_by_analysis(self, analysis_id: UUID, include_domain: bool = True) -> List[SourceModel]:
         query = select(self._model_class).where(self._model_class.analysis_id == analysis_id)
 
         if include_domain:
             query = query.options(selectinload(self._model_class.domain))
 
         result = await self._session.execute(query)
-        return list(result.scalars().all())
+        sources = list(result.scalars().all())
+
+        if not sources:
+            return []
+
+        return sources
 
     async def create_with_domain(self, source: SourceModel) -> Optional[SourceModel]:
         """Create a source with its domain relationship."""

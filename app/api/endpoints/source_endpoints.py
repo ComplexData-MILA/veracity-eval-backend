@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import List
 from uuid import UUID
@@ -7,6 +8,7 @@ from app.services.source_service import SourceService
 from app.schemas.source_schema import SourceRead, SourceList
 from app.core.exceptions import NotFoundException
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sources", tags=["sources"])
 
 
@@ -38,10 +40,13 @@ async def get_analysis_sources(
     Get all sources used in a specific analysis.
     """
     try:
-        sources = await source_service.get_analysis_sources(analysis_id=analysis_id, include_content=include_content)
+        sources = await source_service.get_analysis_sources(analysis_id=analysis_id)
         return [SourceRead.model_validate(s) for s in sources]
     except NotFoundException as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error getting sources: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve sources")
 
 
 @router.get("/domain/{domain_id}", response_model=SourceList, summary="Get domain sources")

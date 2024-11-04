@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID, uuid4
 from typing import List, Optional, Tuple
 from datetime import datetime, UTC
@@ -7,6 +8,8 @@ from app.repositories.implementations.source_repository import SourceRepository
 from app.services.domain_service import DomainService
 from app.core.exceptions import NotFoundException
 from app.core.utils.url import normalize_domain_name
+
+logger = logging.getLogger(__name__)
 
 
 class SourceService:
@@ -48,9 +51,17 @@ class SourceService:
             raise NotFoundException("Source not found")
         return source
 
-    async def get_analysis_sources(self, analysis_id: UUID, include_content: bool = False) -> List[Source]:
+    async def get_analysis_sources(self, analysis_id: UUID) -> List[Source]:
         """Get all sources for an analysis."""
-        return await self._source_repo.get_by_analysis(analysis_id=analysis_id, include_content=include_content)
+        try:
+            sources = await self._source_repo.get_by_analysis(
+                analysis_id=analysis_id,
+                include_domain=True,
+            )
+            return sources
+        except Exception as e:
+            logger.error(f"Error getting sources for analysis {analysis_id}: {str(e)}")
+            raise
 
     async def get_domain_sources(self, domain_id: UUID, limit: int = 50, offset: int = 0) -> Tuple[List[Source], int]:
         """Get sources from a specific domain."""
