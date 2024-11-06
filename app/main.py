@@ -1,19 +1,37 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.api.router import router
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 
+formatter = logging.Formatter(fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.error").setLevel(logging.ERROR)
+logging.getLogger("fastapi").setLevel(logging.WARNING)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logging.info("API Starting up")
+    yield
+    # Shutdown
+    logging.info("API Shutting down")
+
 
 app = FastAPI(
     title="Misinformation Mitigation API",
-    # Disable response model validation for streaming
     response_model_exclude_unset=True,
-    # Disable response validation
     response_validation=False,
+    lifespan=lifespan,
 )
-
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-
 
 app.add_middleware(
     CORSMiddleware,
