@@ -4,14 +4,16 @@ from uuid import UUID, uuid4
 from datetime import UTC, datetime
 import json
 
+from app.core.exceptions import NotAuthorizedException, NotFoundException
 from app.core.llm.interfaces import LLMProvider
-from app.models.database.models import AnalysisStatus, ClaimStatus
+from app.models.database.models import AnalysisStatus, ClaimStatus, ConversationStatus, MessageSenderType
 from app.models.domain.claim import Claim
 from app.models.domain.analysis import Analysis
 from app.models.domain.message import Message
 from app.core.llm.messages import Message as LLMMessage
 from app.models.domain.conversation import Conversation
 from app.models.domain.claim_conversation import ClaimConversation
+from app.repositories.implementations.claim_conversation_repository import ClaimConversationRepository
 from app.repositories.implementations.claim_repository import ClaimRepository
 from app.repositories.implementations.analysis_repository import AnalysisRepository
 from app.repositories.implementations.message_repository import MessageRepository
@@ -26,6 +28,8 @@ class AnalysisState:
     def __init__(self):
         self.current_claim: Optional[Claim] = None
         self.current_analysis: Optional[Analysis] = None
+        self.current_conversation: Optional[Conversation] = None
+        self.current_claim_conversation: Optional[ClaimConversation] = None
         self.analysis_text: List[str] = []
         self.is_complete: bool = False
 
@@ -37,6 +41,7 @@ class AnalysisOrchestrator:
         claim_repo: ClaimRepository,
         analysis_repo: AnalysisRepository,
         conversation_repo: ConversationRepository,
+        claim_conversation_repo: ClaimConversationRepository,
         message_repo: MessageRepository,
         source_repo: SourceRepository,
         web_search_service: WebSearchServiceInterface,
@@ -45,6 +50,7 @@ class AnalysisOrchestrator:
         self._claim_repo = claim_repo
         self._analysis_repo = analysis_repo
         self._conversation_repo = conversation_repo
+        self._claim_conversation_repo = claim_conversation_repo
         self._message_repo = message_repo
         self._source_repo = source_repo
         self._web_search = web_search_service
@@ -83,25 +89,25 @@ class AnalysisOrchestrator:
                     "type": "status",
                     "content": f"Found {len(sources)} relevant sources (overall credibility: {source_credibility:.2f})",
                 }
+
             sources_text = self._web_search.format_sources_for_prompt(sources)
 
             prompt = (
-                "Analyze the following claim using the provided sources and context. "
-                "Consider source credibility when weighing evidence.\n\n"
-                "Provide:\n"
-                "1. A veracity score (0-1)\n"
-                "2. A confidence score (0-1)\n"
-                "3. A detailed analysis explaining your reasoning\n\n"
+                "You are a fact-checking system. Analyze the following claim using the provided sources and context.\n\n"
                 f"Claim: {claim_text}\n\n"
                 f"Context: {context}\n\n"
                 f"Sources:\n{sources_text}\n\n"
-                "Note: Consider both source content and credibility scores in your analysis.\n\n"
-                "Format your response as JSON with the following structure:\n"
+                "Provide your analysis in the following JSON format:\n"
                 "{\n"
-                '  "veracity_score": float,\n'
-                '  "confidence_score": float,\n'
-                '  "analysis": string\n'
-                "}"
+                '    "veracity_score": <float between 0 and 1>,\n'
+                '    "confidence_score": <float between 0 and 1>,\n'
+                '    "analysis": "<detailed analysis text>"\n'
+                "}\n\n"
+                "Important formatting rules:\n"
+                "1. Provide ONLY the JSON object, no additional text\n"
+                "2. Ensure all special characters in the analysis text are properly escaped\n"
+                "3. The analysis field should be a single line with newlines represented as \\n\n"
+                "4. Do not include any control characters\n"
             )
 
             yield {"type": "status", "content": "Analyzing claim with gathered sources..."}
@@ -115,11 +121,35 @@ class AnalysisOrchestrator:
                     full_text = "".join(analysis_text)
 
                     try:
-                        response_data = json.loads(full_text)
+                        # Clean the text before parsing
+                        cleaned_text = (
+                            full_text.strip()
+                            .replace("\r", "")  # Remove carriage returns
+                            .replace("\x00", "")  # Remove null bytes
+                            .replace("\x1a", "")  # Remove SUB characters
+                        )
 
-                        current_analysis.veracity_score = float(response_data["veracity_score"])
-                        current_analysis.confidence_score = float(response_data["confidence_score"])
-                        current_analysis.analysis_text = response_data["analysis"]
+                        # Try to find the JSON object if there's additional text
+                        try:
+                            start_idx = cleaned_text.find("{")
+                            end_idx = cleaned_text.rindex("}") + 1
+                            if start_idx != -1 and end_idx != -1:
+                                cleaned_text = cleaned_text[start_idx:end_idx]
+                        except ValueError:
+                            pass
+
+                        response_data = json.loads(cleaned_text)
+
+                        veracity_score = float(response_data.get("veracity_score", 0))
+                        confidence_score = float(response_data.get("confidence_score", 0))
+                        analysis_content = str(response_data.get("analysis", "No analysis provided"))
+
+                        veracity_score = max(0.0, min(1.0, veracity_score))
+                        confidence_score = max(0.0, min(1.0, confidence_score))
+
+                        current_analysis.veracity_score = veracity_score
+                        current_analysis.confidence_score = confidence_score
+                        current_analysis.analysis_text = analysis_content
                         current_analysis.status = AnalysisStatus.completed.value
                         current_analysis.updated_at = datetime.now(UTC)
 
@@ -137,11 +167,49 @@ class AnalysisOrchestrator:
                         }
 
                     except json.JSONDecodeError as e:
-                        current_analysis.status = AnalysisStatus.failed.value
-                        await self._analysis_repo.update(current_analysis)
-                        yield {"type": "error", "content": f"Error parsing analysis response: {str(e)}"}
-                        raise
+                        logger.error(f"JSON parsing error: {str(e)}\nFull text: {full_text}")
+                        import re
+
+                        try:
+                            veracity_match = re.search(r'"veracity_score":\s*(0?\.\d+)', cleaned_text)
+                            confidence_match = re.search(r'"confidence_score":\s*(0?\.\d+)', cleaned_text)
+                            analysis_match = re.search(r'"analysis":\s*"([^"]+)"', cleaned_text)
+
+                            if veracity_match and confidence_match and analysis_match:
+                                veracity_score = float(veracity_match.group(1))
+                                confidence_score = float(confidence_match.group(1))
+                                analysis_content = analysis_match.group(1)
+
+                                current_analysis.veracity_score = veracity_score
+                                current_analysis.confidence_score = confidence_score
+                                current_analysis.analysis_text = analysis_content
+                                current_analysis.status = AnalysisStatus.completed.value
+                                current_analysis.updated_at = datetime.now(UTC)
+
+                                updated_analysis = await self._analysis_repo.update(current_analysis)
+
+                                yield {
+                                    "type": "analysis_complete",
+                                    "content": {
+                                        "analysis_id": str(updated_analysis.id),
+                                        "veracity_score": updated_analysis.veracity_score,
+                                        "confidence_score": updated_analysis.confidence_score,
+                                        "num_sources": len(sources),
+                                        "source_credibility": source_credibility,
+                                    },
+                                }
+                            else:
+                                raise ValueError("Could not extract required fields using regex")
+
+                        except Exception as regex_error:
+                            logger.error(f"Regex fallback failed: {str(regex_error)}")
+                            current_analysis.status = AnalysisStatus.failed.value
+                            await self._analysis_repo.update(current_analysis)
+                            yield {"type": "error", "content": f"Error parsing analysis response: {str(e)}"}
+                            raise
+
                     except Exception as e:
+                        logger.error(f"Error processing analysis: {str(e)}")
                         current_analysis.status = AnalysisStatus.failed.value
                         await self._analysis_repo.update(current_analysis)
                         yield {"type": "error", "content": f"Error creating analysis: {str(e)}"}
@@ -150,6 +218,67 @@ class AnalysisOrchestrator:
         except Exception as e:
             logger.error(f"Error in _generate_analysis: {str(e)}", exc_info=True)
             yield {"type": "error", "content": str(e)}
+            raise
+
+    async def initialize_claim_conversation(
+        self,
+        user_id: UUID,
+        claim_text: str,
+        analysis_text: str,
+        claim_id: UUID,
+        analysis_id: UUID,
+    ) -> Dict[str, UUID]:
+        """Initialize conversation structure with claim and analysis."""
+        try:
+            # First create the main conversation
+            conversation = Conversation(
+                id=uuid4(),
+                user_id=user_id,
+                start_time=datetime.now(UTC),
+                status=ConversationStatus.active,
+            )
+            conversation = await self._conversation_repo.create(conversation)
+            self._analysis_state.current_conversation = conversation
+
+            # Then create the claim conversation
+            claim_conv = ClaimConversation(
+                id=uuid4(),
+                conversation_id=conversation.id,
+                claim_id=claim_id,
+                start_time=datetime.now(UTC),
+                status=ConversationStatus.active,
+            )
+            claim_conv = await self._claim_conversation_repo.create(claim_conv)
+            self._analysis_state.current_claim_conversation = claim_conv
+
+            # Create initial claim message
+            user_message = Message(
+                id=uuid4(),
+                conversation_id=conversation.id,
+                claim_conversation_id=claim_conv.id,
+                sender_type=MessageSenderType.user,
+                content=claim_text,
+                timestamp=datetime.now(UTC),
+                claim_id=claim_id,
+            )
+            await self._message_repo.create(user_message)
+
+            # Create analysis response message
+            analysis_message = Message(
+                id=uuid4(),
+                conversation_id=conversation.id,
+                claim_conversation_id=claim_conv.id,
+                sender_type=MessageSenderType.bot,
+                content=analysis_text,
+                timestamp=datetime.now(UTC),
+                claim_id=claim_id,
+                analysis_id=analysis_id,
+            )
+            await self._message_repo.create(analysis_message)
+
+            return {"conversation_id": conversation.id, "claim_conversation_id": claim_conv.id}
+        except Exception as e:
+            logger.error(f"Error initializing claim conversation: {str(e)}", exc_info=True)
             raise
 
     async def process_user_message(
@@ -277,7 +406,7 @@ class AnalysisOrchestrator:
         return await self._message_repo.create(message)
 
     async def analyze_claim_stream(self, claim_id: UUID, user_id: UUID) -> AsyncGenerator[Dict[str, Any], None]:
-        """Stream the analysis process for a claim."""
+        """Stream the analysis process for a claim and initialize conversation."""
         try:
             logger.info(f"Starting analysis for claim {claim_id}")
 
@@ -286,11 +415,9 @@ class AnalysisOrchestrator:
                 raise ValueError(f"Claim {claim_id} not found")
 
             logger.debug(f"Retrieved claim: {claim.claim_text}")
-
             self._analysis_state.current_claim = claim
 
             await self._claim_repo.update_status(claim_id, ClaimStatus.analyzing)
-
             yield {"type": "status", "content": "Starting analysis..."}
 
             is_verifiable = await self._detect_claim(claim.claim_text)
@@ -301,17 +428,141 @@ class AnalysisOrchestrator:
                 await self._claim_repo.update_status(claim_id, ClaimStatus.rejected)
                 return
 
-            logger.debug("Starting analysis generation")
+            # Generate analysis
+            analysis_complete = False
             async for chunk in self._generate_analysis(claim.claim_text, claim.context):
+                if chunk["type"] == "analysis_complete":
+                    analysis_complete = True
+                    # Get the full analysis to create conversation
+                    analysis = await self._analysis_repo.get(UUID(chunk["content"]["analysis_id"]))
+
+                    # Initialize conversation structure
+                    conversation_ids = await self.initialize_claim_conversation(
+                        user_id=user_id,
+                        claim_text=claim.claim_text,
+                        analysis_text=analysis.analysis_text,
+                        claim_id=claim_id,
+                        analysis_id=analysis.id,
+                    )
+
+                    # Add conversation IDs to the response
+                    chunk["content"]["conversation_id"] = str(conversation_ids["conversation_id"])
+                    chunk["content"]["claim_conversation_id"] = str(conversation_ids["claim_conversation_id"])
+
                 yield chunk
 
-            await self._claim_repo.update_status(claim_id, ClaimStatus.analyzed)
-
-            logger.info(f"Completed analysis for claim {claim_id}")
+            if analysis_complete:
+                await self._claim_repo.update_status(claim_id, ClaimStatus.analyzed)
+                logger.info(f"Completed analysis for claim {claim_id}")
+            else:
+                await self._claim_repo.update_status(claim_id, ClaimStatus.failed)
+                logger.error(f"Analysis incomplete for claim {claim_id}")
 
         except Exception as e:
             logger.error(f"Error in analyze_claim_stream: {str(e)}", exc_info=True)
             if self._analysis_state.current_claim:
                 await self._claim_repo.update_status(claim_id, ClaimStatus.rejected)
+            yield {"type": "error", "content": str(e)}
+            raise
+
+    async def stream_claim_discussion(
+        self,
+        conversation_id: UUID,
+        claim_conversation_id: UUID,
+        claim_id: UUID,
+        user_id: UUID,
+        message_content: str,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Stream interactive discussion about a claim."""
+        try:
+            # First verify the conversation belongs to the user
+            conversation = await self._conversation_repo.get(conversation_id)
+            if not conversation or conversation.user_id != user_id:
+                raise NotAuthorizedException("Not authorized to access this conversation")
+
+            # Verify the claim conversation
+            claim_conv = await self._claim_conversation_repo.get(claim_conversation_id)
+            if not claim_conv or claim_conv.conversation_id != conversation_id:
+                raise NotAuthorizedException("Not authorized to access this claim conversation")
+
+            # Store user message
+            user_message = Message(
+                id=uuid4(),
+                conversation_id=conversation_id,
+                claim_conversation_id=claim_conversation_id,
+                sender_type=MessageSenderType.user,
+                content=message_content,
+                timestamp=datetime.now(UTC),
+                claim_id=claim_id,
+            )
+            await self._message_repo.create(user_message)
+
+            # Get conversation context (last few messages for context)
+            context_messages = await self._message_repo.get_claim_conversation_messages(
+                claim_conversation_id=claim_conversation_id,
+                limit=10,
+            )
+            context_messages.reverse()  # Oldest messages first
+
+            # Create LLM messages from context
+            llm_messages = [
+                LLMMessage(
+                    role="assistant" if msg.sender_type == MessageSenderType.bot else "user", content=msg.content
+                )
+                for msg in context_messages
+            ]
+
+            # Add current message
+            llm_messages.append(LLMMessage(role="user", content=message_content))
+
+            # Create bot message placeholder
+            bot_message = Message(
+                id=uuid4(),
+                conversation_id=conversation_id,
+                claim_conversation_id=claim_conversation_id,
+                sender_type=MessageSenderType.bot,
+                content="",
+                timestamp=datetime.now(UTC),
+                claim_id=claim_id,
+            )
+            await self._message_repo.create(bot_message)
+
+            # Get claim and analysis for context
+            claim = await self._claim_repo.get(claim_id)
+            if not claim:
+                raise NotFoundException("Claim not found")
+
+            # Get latest analysis
+            analyses = await self._analysis_repo.get_by_claim(claim_id=claim_id, include_sources=True)
+            analysis = analyses[-1] if analyses else None
+
+            if not analysis:
+                raise NotFoundException("Analysis not found")
+
+            system_context = (
+                f"You are a fact-checking assistant. The user is asking about this claim: '{claim.claim_text}'\n"
+                f"Your previous analysis determined this claim is {analysis.veracity_score * 100:.1f}% likely to be true "
+                f"with {analysis.confidence_score * 100:.1f}% confidence.\n"
+                "Please help the user understand the analysis and sources. "
+                "Be direct and factual in your responses."
+            )
+            llm_messages.insert(0, LLMMessage(role="system", content=system_context))
+
+            response_content = []
+            async for chunk in self._llm.generate_stream(llm_messages, temperature=0.7):
+                if not chunk.is_complete:
+                    response_content.append(chunk.text)
+                    yield {"type": "content", "content": chunk.text, "message_id": str(bot_message.id)}
+
+                # Update bot message with complete response when done
+                if chunk.is_complete:
+                    full_response = "".join(response_content)
+                    bot_message.content = full_response
+                    await self._message_repo.update(bot_message)
+
+                    yield {"type": "message_complete", "message_id": str(bot_message.id)}
+
+        except Exception as e:
+            logger.error(f"Error in stream_claim_discussion: {str(e)}", exc_info=True)
             yield {"type": "error", "content": str(e)}
             raise

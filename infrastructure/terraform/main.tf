@@ -278,6 +278,16 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
           }
 
           env {
+            name  = "GOOGLE_SEARCH_API_KEY"
+            value = var.google_search_api_key
+          }
+
+          env {
+            name  = "GOOGLE_SEARCH_ENGINE_ID"
+            value = var.google_search_engine_id
+          }
+
+          env {
             name  = "GOOGLE_APPLICATION_CREDENTIALS"
             value = "/app/service-account.json"
           }
@@ -508,4 +518,12 @@ resource "kubernetes_role_binding" "user_namespace_admin" {
 variable "user_email" {
   description = "Email of the user to grant permissions"
   default     = "wgarneau@veri-fact.ai"
+}
+
+variable "google_search_api_key" {
+  description = "Google Search API Key"
+}
+
+variable "google_search_engine_id" {
+  description = "Google Search Engine ID"
 }
