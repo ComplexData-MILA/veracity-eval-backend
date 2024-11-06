@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from uuid import UUID
 
@@ -23,7 +24,17 @@ async def create_feedback(
 ):
     """Create new feedback for an analysis."""
     # fake user for now
-    user = User(id=UUID("00000000-0000-0000-0000-000000000000"), email="bob@test.com")
+    user = User(
+        id=UUID("00000000-0000-0000-0000-000000000000"),
+        email="bob@test.com",
+        auth0_id="auth0|1234567890",
+        username="bob",
+        is_active=True,
+        last_login=None,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
     try:
         feedback = await feedback_service.create_feedback(
             user_id=user.id,

@@ -80,7 +80,7 @@ def downgrade() -> None:
             if column_exists(table, column):
                 op.execute(
                     f"""
-                    ALTER TABLE {table} 
+                    ALTER TABLE {table}
                     ALTER COLUMN {column} TYPE TIMESTAMP WITHOUT TIME ZONE
                 """
                 )

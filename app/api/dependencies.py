@@ -125,8 +125,9 @@ async def get_source_service(
 
 async def get_feedback_service(
     feedback_repository: FeedbackRepository = Depends(get_feedback_repository),
+    analysis_repository: AnalysisRepository = Depends(get_analysis_repository),
 ) -> FeedbackService:
-    return FeedbackService(feedback_repository)
+    return FeedbackService(feedback_repository, analysis_repository)
 
 
 async def get_llm_provider():

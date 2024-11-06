@@ -5,7 +5,6 @@ from uuid import UUID
 
 class FeedbackCreate(BaseModel):
     analysis_id: UUID
-    user_id: UUID
     rating: float
     comment: str
 
