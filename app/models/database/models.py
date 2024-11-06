@@ -81,7 +81,10 @@ class ConversationModel(Base):
     )
     end_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[ConversationStatus] = mapped_column(
-        SQLEnum(ConversationStatus), default=ConversationStatus.active, nullable=False, index=True
+        SQLEnum(ConversationStatus, name="conversation_status"),
+        default=ConversationStatus.active,
+        nullable=False,
+        index=True,
     )
 
     user: Mapped["UserModel"] = relationship(back_populates="conversations")
@@ -217,7 +220,10 @@ class ClaimConversationModel(Base):
     )
     end_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[ConversationStatus] = mapped_column(
-        SQLEnum(ConversationStatus), default=ConversationStatus.active, nullable=False, index=True
+        SQLEnum(ConversationStatus, name="conversation_status"),
+        default=ConversationStatus.active,
+        nullable=False,
+        index=True,
     )
 
     conversation: Mapped["ConversationModel"] = relationship(back_populates="claim_conversations")
@@ -234,7 +240,9 @@ class MessageModel(Base):
         nullable=False,
         index=True,
     )
-    sender_type: Mapped[MessageSenderType] = mapped_column(SQLEnum(MessageSenderType), nullable=False, index=True)
+    sender_type: Mapped[MessageSenderType] = mapped_column(
+        SQLEnum(MessageSenderType, name="message_sender_type"), nullable=False, index=True
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False

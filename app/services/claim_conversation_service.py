@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from uuid import UUID, uuid4
 from datetime import UTC, datetime
 from app.core.exceptions import NotAuthorizedException, NotFoundException
@@ -22,6 +22,8 @@ class ClaimConversationService:
         self, conversation_id: UUID, user_id: UUID, claim_id: UUID
     ) -> Tuple[ClaimConversation, Conversation]:
         conversation = await self._conversation_service.get_conversation(conversation_id, user_id)
+        if not conversation:
+            raise NotFoundException("Conversation not found")
 
         claim_conversation = ClaimConversation(
             id=uuid4(),
@@ -32,22 +34,29 @@ class ClaimConversationService:
         )
 
         created_claim_conv = await self._claim_conversation_repo.create(claim_conversation)
-
         return created_claim_conv, conversation
 
-    async def get_claim_conversation(
-        self, claim_conversation_id: UUID, user_id: UUID
-    ) -> Tuple[ClaimConversation, Conversation]:
-        claim_conv = await self._claim_conversation_repo.get(claim_conversation_id)
+    async def get_claim_conversation(self, claim_conversation_id: UUID, user_id: UUID) -> Optional[ClaimConversation]:
+        """Get claim conversation if it belongs to the user"""
+        claim_conv = await self._claim_conversation_repo.get_user_claim_conversation(
+            claim_conversation_id=claim_conversation_id, user_id=user_id
+        )
+
         if not claim_conv:
             raise NotFoundException("Claim conversation not found")
 
-        conversation = await self._conversation_repo.get(claim_conv.conversation_id)
-        if conversation.user_id != user_id:
-            raise NotAuthorizedException("Not authorized to access this claim conversation")
+        return self._claim_conversation_repo._to_domain(claim_conv)
 
-        return claim_conv, conversation
+    async def verify_ownership(self, claim_conversation_id: UUID, user_id: UUID) -> bool:
+        """Verify that a claim conversation belongs to a user"""
+        claim_conv = await self._claim_conversation_repo.get_user_claim_conversation(
+            claim_conversation_id=claim_conversation_id, user_id=user_id
+        )
+        return claim_conv is not None
 
     async def list_conversation_claims(self, conversation_id: UUID, user_id: UUID) -> List[ClaimConversation]:
-        await self.get_conversation(conversation_id, user_id)
+        conversation = await self._conversation_service.get_conversation(conversation_id, user_id)
+        if not conversation:
+            raise NotAuthorizedException("Not authorized to access this conversation")
+
         return await self._claim_conversation_repo.get_by_conversation(conversation_id)

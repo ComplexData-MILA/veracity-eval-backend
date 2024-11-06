@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import logging
@@ -125,11 +126,12 @@ class VertexAILlamaProvider(LLMProvider):
     async def generate_stream(
         self, messages: List[Message], temperature: float = 0.7
     ) -> AsyncGenerator[ResponseChunk, None]:
+        """Generate a streaming response."""
         try:
             self._refresh_token_if_needed()
 
-            logger.debug(f"Starting stream generation with temperature {temperature}")
-            logger.debug(f"Number of messages: {len(messages)}")
+            logger.debug("Starting stream generation")
+            logger.debug(f"Messages: {messages}")
 
             response = self.client.chat.completions.create(
                 model=self.model_id,
@@ -140,16 +142,15 @@ class VertexAILlamaProvider(LLMProvider):
             )
 
             for chunk in response:
-                if chunk.choices[0].delta.content:
-                    yield ResponseChunk(
-                        text=chunk.choices[0].delta.content, is_complete=False, metadata={"model": self.model_id}
-                    )
+                if chunk.choices and chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    logger.debug(f"Streaming chunk: {content}")
+                    yield ResponseChunk(text=content, is_complete=False, metadata={"model": self.model_id})
+                    # Small delay for chunking
+                    await asyncio.sleep(0.01)
 
             yield ResponseChunk(text="", is_complete=True, metadata={"model": self.model_id})
 
         except Exception as e:
-            logger.error(f"Error generating stream: {str(e)}", exc_info=True)
-            if hasattr(e, "response"):
-                logger.error(f"Response status: {e.response.status_code}")
-                logger.error(f"Response text: {e.response.text}")
+            logger.error(f"Error in generate_stream: {str(e)}", exc_info=True)
             raise

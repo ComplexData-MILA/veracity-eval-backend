@@ -1,8 +1,9 @@
 from typing import Optional, List
 from uuid import UUID
 from sqlalchemy import select, and_
+from sqlalchemy.orm import joinedload
 
-from app.models.database.models import ClaimConversationModel
+from app.models.database.models import ClaimConversationModel, ConversationModel
 from app.models.domain.claim_conversation import ClaimConversation
 from app.repositories.base import BaseRepository
 
@@ -31,10 +32,32 @@ class ClaimConversationRepository(BaseRepository[ClaimConversationModel, ClaimCo
             status=model.status,
         )
 
+    async def get_with_conversation(self, claim_conversation_id: UUID) -> Optional[ClaimConversationModel]:
+        """Get claim conversation with its parent conversation loaded"""
+        query = (
+            select(self._model_class)
+            .options(joinedload(self._model_class.conversation))
+            .where(self._model_class.id == claim_conversation_id)
+        )
+        result = await self._session.execute(query)
+        return result.unique().scalar_one_or_none()
+
     async def get_by_conversation(self, conversation_id: UUID) -> List[ClaimConversation]:
         query = select(self._model_class).where(self._model_class.conversation_id == conversation_id)
         result = await self._session.execute(query)
         return [self._to_domain(obj) for obj in result.scalars().all()]
+
+    async def get_user_claim_conversation(
+        self, claim_conversation_id: UUID, user_id: UUID
+    ) -> Optional[ClaimConversationModel]:
+        """Get claim conversation if it belongs to the user"""
+        query = (
+            select(self._model_class)
+            .join(ConversationModel)
+            .where(and_(self._model_class.id == claim_conversation_id, ConversationModel.user_id == user_id))
+        )
+        result = await self._session.execute(query)
+        return result.scalar_one_or_none()
 
     async def get_active_by_claim(self, claim_id: UUID) -> Optional[ClaimConversation]:
         query = select(self._model_class).where(

@@ -4,7 +4,13 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 
 
-app = FastAPI(title="Misinformation Mitigation API")
+app = FastAPI(
+    title="Misinformation Mitigation API",
+    # Disable response model validation for streaming
+    response_model_exclude_unset=True,
+    # Disable response validation
+    response_validation=False,
+)
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
