@@ -46,10 +46,6 @@ class UserService:
         """Get user by Auth0 ID."""
         return await self._user_repo.get_by_auth0_id(auth0_id)
 
-    async def get_by_email(self, email: str) -> Optional[User]:
-        """Get user by email."""
-        return await self._user_repo.get_by_email(email)
-
     async def record_login(self, user_id: UUID) -> User:
         """Record user login."""
         user = await self.get_user(user_id)
@@ -61,8 +57,4 @@ class UserService:
         user = await self.get_user(user_id)
         user.is_active = False
         user.updated_at = datetime.now(UTC)
-        return await self._user_repo.update(user)
-
-    async def update_user(self, user: User) -> User:
-        """Update user data."""
         return await self._user_repo.update(user)
