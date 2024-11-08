@@ -1,12 +1,12 @@
 import logging
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import AsyncGenerator
 
 
-from app.core.auth.auth0_middleware import AuthMiddleware, security
+from app.core.auth.auth0_middleware import Auth0Middleware, security
 from app.core.llm.vertex_ai_llama import VertexAILlamaProvider
 from app.db.session import get_session
 from app.models.domain.user import User
@@ -173,12 +173,14 @@ async def get_orchestrator_service(
     )
 
 
-async def get_auth_middleware(user_service: UserService = Depends(get_user_service)) -> AuthMiddleware:
-    return AuthMiddleware(user_service)
+async def get_auth_middleware(user_service: UserService = Depends(get_user_service)) -> Auth0Middleware:
+    return Auth0Middleware(user_service)
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    auth_middleware: AuthMiddleware = Depends(get_auth_middleware),
 ) -> User:
+    """Get current authenticated user"""
+    auth_middleware: Auth0Middleware = request.app.state.auth_middleware
     return await auth_middleware.get_current_user(credentials)

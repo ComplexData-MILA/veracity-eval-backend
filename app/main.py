@@ -1,11 +1,13 @@
+# app/main.py
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.api.router import router
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.config import settings
-import logging
-
 from app.core.auth.auth0_middleware import Auth0Middleware
+from app.services.user_service import UserService
+from app.repositories.implementations.user_repository import UserRepository
+from app.db.session import AsyncSessionLocal
+import logging
 
 formatter = logging.Formatter(fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
@@ -19,15 +21,19 @@ logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logging.getLogger("uvicorn.error").setLevel(logging.ERROR)
 logging.getLogger("fastapi").setLevel(logging.WARNING)
 
-auth0_middleware = Auth0Middleware(domain=settings.AUTH0_DOMAIN, audience=settings.AUTH0_AUDIENCE)
+
+async def get_user_service():
+    async with AsyncSessionLocal() as session:
+        user_repo = UserRepository(session)
+        return UserService(user_repo)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     logging.info("API Starting up")
+    user_service = await get_user_service()
+    app.state.auth_middleware = Auth0Middleware(user_service)
     yield
-    # Shutdown
     logging.info("API Shutting down")
 
 
