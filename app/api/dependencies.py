@@ -1,12 +1,11 @@
 import logging
 from fastapi import Depends, Request
-from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import AsyncGenerator
 
 
-from app.core.auth.auth0_middleware import Auth0Middleware, security
+from app.core.auth.auth0_middleware import Auth0Middleware
 from app.core.llm.vertex_ai_llama import VertexAILlamaProvider
 from app.db.session import get_session
 from app.models.domain.user import User
@@ -122,8 +121,10 @@ async def get_domain_service(domain_repository: DomainRepository = Depends(get_d
 async def get_source_service(
     source_repository: SourceRepository = Depends(get_source_repository),
     domain_service: DomainService = Depends(get_domain_service),
+    analysis_repository: AnalysisRepository = Depends(get_analysis_repository),
+    claim_repository: ClaimRepository = Depends(get_claim_repository),
 ) -> SourceService:
-    return SourceService(source_repository, domain_service)
+    return SourceService(source_repository, domain_service, analysis_repository, claim_repository)
 
 
 async def get_feedback_service(
@@ -173,14 +174,9 @@ async def get_orchestrator_service(
     )
 
 
-async def get_auth_middleware(user_service: UserService = Depends(get_user_service)) -> Auth0Middleware:
+def get_auth_middleware(user_service: UserService = Depends(get_user_service)) -> Auth0Middleware:
     return Auth0Middleware(user_service)
 
 
-async def get_current_user(
-    request: Request,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-) -> User:
-    """Get current authenticated user"""
-    auth_middleware: Auth0Middleware = request.app.state.auth_middleware
-    return await auth_middleware.get_current_user(credentials)
+async def get_current_user(request: Request, auth_middleware: Auth0Middleware = Depends(get_auth_middleware)) -> User:
+    return await auth_middleware.authenticate_request(request)
