@@ -1,43 +1,24 @@
-from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from uuid import UUID
 
-from app.api.dependencies import get_feedback_service
+from app.api.dependencies import get_feedback_service, get_current_user
 from app.models.domain.user import User
-from app.schemas.feedback_schema import FeedbackCreate, FeedbackList, FeedbackRead, FeedbackUpdate
+from app.schemas.feedback_schema import FeedbackCreate, FeedbackList, FeedbackRead
 from app.services.feedback_service import FeedbackService
-from app.core.exceptions import (
-    InvalidFeedbackRatingError,
-    NotAuthorizedException,
-    NotFoundException,
-    DuplicateFeedbackError,
-)
+from app.core.exceptions import NotFoundException, DuplicateFeedbackError
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 
-@router.post("/", response_model=FeedbackRead, status_code=status.HTTP_201_CREATED, summary="Create new feedback")
+@router.post("/", response_model=FeedbackRead, status_code=status.HTTP_201_CREATED)
 async def create_feedback(
     data: FeedbackCreate,
-    # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
+    current_user: User = Depends(get_current_user),
     feedback_service: FeedbackService = Depends(get_feedback_service),
 ):
-    """Create new feedback for an analysis."""
-    # fake user for now
-    user = User(
-        id=UUID("00000000-0000-0000-0000-000000000000"),
-        email="bob@test.com",
-        auth0_id="auth0|1234567890",
-        username="bob",
-        is_active=True,
-        last_login=None,
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
-
     try:
         feedback = await feedback_service.create_feedback(
-            user_id=user.id,
+            user_id=current_user.id,
             analysis_id=data.analysis_id,
             rating=data.rating,
             comment=data.comment,
@@ -47,14 +28,14 @@ async def create_feedback(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/analysis/{analysis_id}", response_model=FeedbackList, summary="Get analysis feedback")
+@router.get("/analysis/{analysis_id}", response_model=FeedbackList)
 async def get_analysis_feedback(
     analysis_id: UUID,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
     feedback_service: FeedbackService = Depends(get_feedback_service),
 ):
-    """Get all feedback for an analysis."""
     feedback_list, total = await feedback_service.get_analysis_feedback(
         analysis_id=analysis_id, limit=limit, offset=offset
     )
@@ -63,42 +44,14 @@ async def get_analysis_feedback(
     )
 
 
-@router.get("/user", response_model=FeedbackList, summary="Get user feedback")
+@router.get("/user", response_model=FeedbackList)
 async def get_user_feedback(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    # current_data: Tuple[User, Auth0Session] = Depends(get_current_user_and_session),
+    current_user: User = Depends(get_current_user),
     feedback_service: FeedbackService = Depends(get_feedback_service),
 ):
-    """Get all feedback from the current user."""
-    # fake user for now
-    user = User(id=UUID("00000000-0000-0000-0000-000000000000"), email="bob@test.com")
-    feedback_list, total = await feedback_service.get_user_feedback(user_id=user.id, limit=limit, offset=offset)
+    feedback_list, total = await feedback_service.get_user_feedback(user_id=current_user.id, limit=limit, offset=offset)
     return FeedbackList(
         items=[FeedbackRead.model_validate(f) for f in feedback_list], total=total, limit=limit, offset=offset
     )
-
-
-@router.put("/{feedback_id}", response_model=FeedbackRead, summary="Update feedback")
-async def update_feedback(
-    feedback_id: UUID,
-    update_data: FeedbackUpdate,
-    # current_data: tuple[User, Auth0Session] = Depends(get_current_user_and_session),
-    feedback_service: FeedbackService = Depends(get_feedback_service),
-) -> FeedbackRead:
-    """
-    Update existing feedback.
-    Users can only update their own feedback.
-    """
-    # fake user for now
-    user = User(id=UUID("00000000-0000-0000-0000-000000000000"), email="bob@test.com")
-    try:
-        result = await feedback_service.update_feedback(
-            feedback_id=feedback_id,
-            user_id=user.id,
-            rating=update_data.rating,
-            comment=update_data.comment,
-        )
-        return FeedbackRead.model_validate(result)
-    except (NotFoundException, NotAuthorizedException, InvalidFeedbackRatingError) as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
