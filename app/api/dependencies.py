@@ -1,12 +1,15 @@
 import logging
 from fastapi import Depends
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import AsyncGenerator
 
 
+from app.core.auth.auth0_middleware import AuthMiddleware, security
 from app.core.llm.vertex_ai_llama import VertexAILlamaProvider
 from app.db.session import get_session
+from app.models.domain.user import User
 from app.repositories.implementations.claim_conversation_repository import ClaimConversationRepository
 from app.repositories.implementations.user_repository import UserRepository
 from app.repositories.implementations.claim_repository import ClaimRepository
@@ -168,3 +171,14 @@ async def get_orchestrator_service(
         web_search_service=web_search_service,
         llm_provider=llm_provider,
     )
+
+
+async def get_auth_middleware(user_service: UserService = Depends(get_user_service)) -> AuthMiddleware:
+    return AuthMiddleware(user_service)
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    auth_middleware: AuthMiddleware = Depends(get_auth_middleware),
+) -> User:
+    return await auth_middleware.get_current_user(credentials)

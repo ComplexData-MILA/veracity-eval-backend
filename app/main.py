@@ -2,7 +2,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.api.router import router
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.config import settings
 import logging
+
+from app.core.auth.auth0_middleware import Auth0Middleware
 
 formatter = logging.Formatter(fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
@@ -15,6 +18,8 @@ logging.basicConfig(
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logging.getLogger("uvicorn.error").setLevel(logging.ERROR)
 logging.getLogger("fastapi").setLevel(logging.WARNING)
+
+auth0_middleware = Auth0Middleware(domain=settings.AUTH0_DOMAIN, audience=settings.AUTH0_AUDIENCE)
 
 
 @asynccontextmanager

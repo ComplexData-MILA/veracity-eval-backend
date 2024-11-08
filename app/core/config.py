@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     VERTEX_AI_LOCATION: str = "us-central1"
     VERTEX_AI_ENDPOINT_ID: str = "us-central1-aiplatform.googleapis.com"
     GOOGLE_CLOUD_PROJECT: str = "misinformation-mitigation"
+    AUTH0_DOMAIN: str = "fake-domain"
+    AUTH0_AUDIENCE: str = "fake-audience"
+    AUTH0_CLIENT_ID: str = "fake-client-id"
+    AUTH0_CLIENT_SECRET: str = "fake-client-secret"
     GOOGLE_APPLICATION_CREDENTIALS: str = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "service-account.json"
     )
