@@ -1,3 +1,4 @@
+import asyncio
 from typing import Optional
 from uuid import uuid4
 import aiohttp
@@ -52,24 +53,49 @@ class Auth0Middleware:
         self.jwks = None
         self.user_service = user_service
         self.security = Auth0Bearer()
+        self.timeout = aiohttp.ClientTimeout(total=10, connect=5, sock_read=5, sock_connect=5)
 
     async def _get_jwks(self) -> dict:
         """Fetch and cache JWKS from Auth0."""
         if not self.jwks:
             try:
                 jwks_url = f"https://{self.domain}/.well-known/jwks.json"
-                logger.debug(f"Fetching JWKS from: {jwks_url}")
+                logger.info(f"Starting JWKS fetch from: {jwks_url}")
 
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(jwks_url) as response:
-                        if response.status != 200:
-                            logger.error(f"Failed to fetch JWKS. Status: {response.status}")
-                            raise HTTPException(status_code=500, detail="Failed to fetch authentication keys")
-                        self.jwks = await response.json()
-                        logger.debug(f"Successfully fetched JWKS: {json.dumps(self.jwks, indent=2)}")
-            except aiohttp.ClientError as e:
-                logger.error(f"Network error fetching JWKS: {str(e)}")
+                connector = aiohttp.TCPConnector(
+                    ssl=False, enable_cleanup_closed=True, force_close=True  # Don't reuse connections
+                )
+
+                async with aiohttp.ClientSession(
+                    timeout=self.timeout,
+                    connector=connector,
+                    trust_env=True,
+                ) as session:
+                    logger.info("Session created, sending request...")
+                    try:
+                        async with session.get(jwks_url) as response:
+                            logger.info(f"Request sent, status: {response.status}")
+                            if response.status != 200:
+                                error_text = await response.text()
+                                logger.error(f"Failed JWKS fetch. Status: {response.status}, Response: {error_text}")
+                                raise HTTPException(
+                                    status_code=500, detail=f"Failed to fetch authentication keys: {error_text}"
+                                )
+                            logger.info("Reading response...")
+                            self.jwks = await response.json()
+                            logger.info("Successfully fetched and parsed JWKS")
+                    except asyncio.TimeoutError:
+                        logger.error("Timeout while fetching JWKS")
+                        raise HTTPException(status_code=500, detail="Authentication service timeout")
+                    except aiohttp.ClientError as e:
+                        logger.error(f"Client error during JWKS fetch: {str(e)}")
+                        raise HTTPException(status_code=500, detail=f"Network error: {str(e)}")
+
+            except Exception as e:
+                logger.error(f"JWKS fetch failed: {str(e)}", exc_info=True)
                 raise HTTPException(status_code=500, detail="Authentication service unavailable")
+            finally:
+                logger.info("JWKS fetch attempt completed")
         return self.jwks
 
     async def _verify_token(self, token: str) -> dict:
@@ -103,15 +129,33 @@ class Auth0Middleware:
         """Fetch additional user info from Auth0."""
         try:
             userinfo_url = f"https://{self.domain}/userinfo"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(userinfo_url, headers={"Authorization": f"Bearer {access_token}"}) as response:
-                    if response.status != 200:
-                        logger.error(f"Failed to fetch user info. Status: {response.status}")
-                        return {}
-                    return await response.json()
+            logger.info(f"Starting user info fetch from: {userinfo_url}")
+
+            connector = aiohttp.TCPConnector(ssl=False, enable_cleanup_closed=True, force_close=True)
+
+            async with aiohttp.ClientSession(timeout=self.timeout, connector=connector, trust_env=True) as session:
+                try:
+                    async with session.get(
+                        userinfo_url, headers={"Authorization": f"Bearer {access_token}"}
+                    ) as response:
+                        logger.info(f"User info request sent, status: {response.status}")
+                        if response.status != 200:
+                            logger.error(f"Failed user info fetch. Status: {response.status}")
+                            return {}
+                        user_info = await response.json()
+                        logger.info("Successfully fetched user info")
+                        return user_info
+                except asyncio.TimeoutError:
+                    logger.error("Timeout while fetching user info")
+                    return {}
+                except aiohttp.ClientError as e:
+                    logger.error(f"Client error during user info fetch: {str(e)}")
+                    return {}
         except Exception as e:
-            logger.error(f"Error fetching user info: {str(e)}")
+            logger.error(f"User info fetch failed: {str(e)}", exc_info=True)
             return {}
+        finally:
+            logger.info("User info fetch attempt completed")
 
     def _generate_username(self, payload: dict) -> str:
         """Generate username from Auth0 payload."""

@@ -27,12 +27,12 @@ class Settings(BaseSettings):
 
     LLAMA_MODEL_NAME: str = "meta/llama-3.1-70b-instruct-maas"
 
-    AUTH0_DOMAIN: str = "fake-domain"
-    AUTH0_AUDIENCE: str = "fake-audience"
-    AUTH0_CLIENT_ID: str = "fake-client-id"
-    AUTH0_CLIENT_SECRET: str = "fake-client-secret"
+    AUTH0_DOMAIN: str = "veri-fact.ca.auth0.com"
+    AUTH0_AUDIENCE: str = "https://veri-fact.ca.auth0.com/api/v2/"
+    AUTH0_CLIENT_ID: str = ""
+    AUTH0_CLIENT_SECRET: str = ""
     AUTH0_ALGORITHMS: str = "RS256"
-    AUTH0_ISSUER: str = "https://fake-domain/"
+    AUTH0_ISSUER: str = "https://veri-fact.ca.auth0.com/"
 
     DEBUG: bool = False
 
