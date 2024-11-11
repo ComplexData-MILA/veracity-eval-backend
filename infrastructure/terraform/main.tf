@@ -288,6 +288,16 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
           }
 
           env {
+            name  = "AUTH0_CLIENT_SECRET"
+            value = var.auth0_client_secret
+          }
+
+          env {
+            name  = "AUTH0_CLIENT_ID"
+            value = var.auth0_client_id
+          }
+
+          env {
             name  = "GOOGLE_APPLICATION_CREDENTIALS"
             value = "/app/service-account.json"
           }
@@ -445,6 +455,44 @@ resource "google_dns_record_set" "api" {
   rrdatas = [google_compute_global_address.misinformation_mitigation_api_ip.address]
 }
 
+resource "google_compute_router" "router" {
+  name    = "misinformation-mitigation-router"
+  region  = var.region
+  network = google_compute_network.vpc_network.id
+}
+
+resource "google_compute_router_nat" "nat" {
+  name                               = "misinformation-mitigation-nat"
+  router                             = google_compute_router.router.name
+  region                             = google_compute_router.router.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+
+  log_config {
+    enable = true
+    filter = "ERRORS_ONLY"
+  }
+}
+
+resource "google_compute_firewall" "allow_egress" {
+  name    = "allow-egress"
+  network = google_compute_network.vpc_network.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["443"] # HTTPS
+  }
+
+  allow {
+    protocol = "udp"
+    ports    = ["53"] # DNS
+  }
+
+  direction          = "EGRESS"
+  destination_ranges = ["0.0.0.0/0"] # All destinations
+}
+
+
 # Variables
 variable "project_id" {
   description = "The project ID to deploy to"
@@ -526,4 +574,12 @@ variable "google_search_api_key" {
 
 variable "google_search_engine_id" {
   description = "Google Search Engine ID"
+}
+
+variable "auth0_client_id" {
+  description = "Auth0 Client ID"
+}
+
+variable "auth0_client_secret" {
+  description = "Auth0 Client Secret"
 }
