@@ -9,3 +9,6 @@ __pycache__/
 .mypy_cache/
 infrastructure/terraform/.terraform
 service-account.json
+.env.global
+get-pip.py
+.DS_Store

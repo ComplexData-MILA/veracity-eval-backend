@@ -14,6 +14,7 @@ class Claim:
     claim_text: str
     context: str
     status: str
+    language: str
     created_at: datetime
     updated_at: datetime
 
@@ -26,6 +27,7 @@ class Claim:
             claim_text=model.claim_text,
             context=model.context,
             status=ClaimStatus(model.status),
+            language=model.language,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -38,4 +40,5 @@ class Claim:
             claim_text=self.claim_text,
             context=self.context,
             status=ClaimStatus(self.status).value,
+            language=self.language,
         )
