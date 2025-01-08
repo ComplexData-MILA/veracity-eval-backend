@@ -46,11 +46,13 @@ async def get_analysis_sources(
     Get all sources used in a specific analysis.
     Verifies that the user has access to the analysis before returning sources.
     """
+    # TODO include content does not do anything at the moment, it either needs to be removed or created 
     try:
         sources = await source_service.get_analysis_sources(
             analysis_id=analysis_id, user_id=current_user.id, include_content=include_content
         )
-        return [SourceRead.model_validate(s) for s in sources]
+        sorted_sources = sorted(sources, key=lambda x: (x["credibility_score"] is None, x["credibility_score"]))
+        return [SourceRead.model_validate(s) for s in sorted_sources]
     except NotFoundException as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except NotAuthorizedException:

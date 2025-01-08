@@ -145,5 +145,12 @@ class GoogleWebSearchService(WebSearchServiceInterface):
         """Calculate overall credibility score for a set of sources."""
         if not sources:
             return 0.0
-        # TODO Taylor to check how to account for null credibility score
-        return sum(source.credibility_score for source in sources) / len(sources)
+
+        # Filter out sources with null credibility scores
+        valid_scores = [source.credibility_score for source in sources if source.credibility_score is not None]
+        
+        if not valid_scores:
+            return 0.0  # Return 0.0 if no valid scores exist
+
+        # Calculate the average of the valid scores
+        return sum(valid_scores) / len(valid_scores)

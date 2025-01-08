@@ -1,5 +1,5 @@
- POSTGRES_USER=user
- POSTGRES_PASSWORD=password
- POSTGRES_DB=mitigation_misinformation_db
- POSTGRES_HOST=localhost
- POSTGRES_PORT=5432
+POSTGRES_USER=taylor
+POSTGRES_PASSWORD=Mila1234
+POSTGRES_DB=mitigation_misinformation_db
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432

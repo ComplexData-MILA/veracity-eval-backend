@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 def parse_db_url(url: str) -> dict:
     """Parse database URL into connection parameters."""
     parsed = urlparse(url)
+    print(parsed)
     return {
         "dbname": parsed.path[1:],
         "user": parsed.username,
@@ -44,6 +45,7 @@ def wait_for_db() -> None:
 
     if settings.DATABASE_URL:
         logger.info("Using DATABASE_URL for connection")
+        logger.info(settings.DATABASE_URL)
         try:
             db_params = parse_db_url(settings.DATABASE_URL)
             conn_params.update(db_params)
