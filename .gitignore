@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 .env.local
 .env
+.env.global
+.env.base
 .idea/
 .vscode/
 *.log
