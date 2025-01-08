@@ -48,7 +48,7 @@ app.add_middleware(
     allow_origins=[
         "https://misinformation-mitigation-ui.vercel.app",
         "http://localhost:3000",
-        "https://www.veri-fact.ai"
+        "https://www.veri-fact.ai",
     ],
     allow_credentials=True,
     allow_methods=["*"],
