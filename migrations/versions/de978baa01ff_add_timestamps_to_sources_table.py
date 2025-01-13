@@ -20,12 +20,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "sources",
-        sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False
-        ),
-    )
+    # op.add_column(
+    #     "sources",
+    #     sa.Column(
+    #         "created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False
+    #     ),
+    # )
 
     op.execute(
         """
@@ -52,4 +52,4 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute("DROP TRIGGER IF EXISTS update_sources_updated_at ON sources")
 
-    op.drop_column("sources", "created_at")
+    # op.drop_column("sources", "created_at")

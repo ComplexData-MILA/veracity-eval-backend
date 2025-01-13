@@ -50,35 +50,35 @@ def upgrade() -> None:
         ALTER TABLE claim_conversations ALTER COLUMN status SET DEFAULT 'active';
     """)
     op.create_index(op.f('ix_claim_conversations_status'), 'claim_conversations', ['status'], unique=False)
-    op.drop_constraint('fk_claim_conversations_conversation_id_conversations', 'claim_conversations', type_='foreignkey')
-    op.drop_constraint('fk_claim_conversations_claim_id_claims', 'claim_conversations', type_='foreignkey')
-    op.create_foreign_key(op.f('fk_claim_conversations_claim_id_claims'), 'claim_conversations', 'claims', ['claim_id'], ['id'])
-    op.create_foreign_key(op.f('fk_claim_conversations_conversation_id_conversations'), 'claim_conversations', 'conversations', ['conversation_id'], ['id'])
-    op.add_column('claims', sa.Column('language', sa.Text(), nullable=False))
-    op.alter_column('claims', 'context',
-               existing_type=sa.TEXT(),
-               nullable=False)
+    # op.drop_constraint('fk_claim_conversations_conversation_id_conversations', 'claim_conversations', type_='foreignkey')
+    # op.drop_constraint('fk_claim_conversations_claim_id_claims', 'claim_conversations', type_='foreignkey')
+    # op.create_foreign_key(op.f('fk_claim_conversations_claim_id_claims'), 'claim_conversations', 'claims', ['claim_id'], ['id'])
+    # op.create_foreign_key(op.f('fk_claim_conversations_conversation_id_conversations'), 'claim_conversations', 'conversations', ['conversation_id'], ['id'])
+    op.add_column('claims', sa.Column('language', sa.Text(), nullable=False, server_default='english'))
+    # op.alter_column('claims', 'context',
+    #            existing_type=sa.TEXT(),
+    #            nullable=True)
     op.drop_index('ix_claims_status', table_name='claims')
     op.create_index(op.f('ix_claims_user_id'), 'claims', ['user_id'], unique=False)
     op.create_index(op.f('ix_conversations_user_id'), 'conversations', ['user_id'], unique=False)
     op.drop_constraint('uq_domains_domain_name', 'domains', type_='unique')
     op.create_index(op.f('ix_domains_domain_name'), 'domains', ['domain_name'], unique=True)
-    op.create_index('idx_unique_user_analysis', 'feedback', ['analysis_id', 'user_id'], unique=True)
+    op.create_index('ix_unique_user_analysis', 'feedback', ['analysis_id', 'user_id'], unique=True)
     op.create_index(op.f('ix_feedback_analysis_id'), 'feedback', ['analysis_id'], unique=False)
-    op.create_index(op.f('ix_feedback_user_id'), 'feedback', ['user_id'], unique=False)
+    op.create_index(op.f('ix_feedback_user_id'), 'feedback', ['user_id'], unique=False) 
     op.create_index(op.f('ix_messages_analysis_id'), 'messages', ['analysis_id'], unique=False)
     op.create_index(op.f('ix_messages_claim_id'), 'messages', ['claim_id'], unique=False)
-    op.drop_constraint('fk_messages_conversation_id_conversations', 'messages', type_='foreignkey')
-    op.drop_constraint('fk_messages_claim_conversation_id', 'messages', type_='foreignkey')
-    op.drop_constraint('fk_messages_claim_id_claims', 'messages', type_='foreignkey')
-    op.drop_constraint('fk_messages_analysis_id_analysis', 'messages', type_='foreignkey')
-    op.create_foreign_key(op.f('fk_messages_analysis_id_analysis'), 'messages', 'analysis', ['analysis_id'], ['id'])
-    op.create_foreign_key(op.f('fk_messages_claim_id_claims'), 'messages', 'claims', ['claim_id'], ['id'])
-    op.create_foreign_key(op.f('fk_messages_claim_conversation_id_claim_conversations'), 'messages', 'claim_conversations', ['claim_conversation_id'], ['id'])
-    op.create_foreign_key(op.f('fk_messages_conversation_id_conversations'), 'messages', 'conversations', ['conversation_id'], ['id'])
-    op.alter_column('sources', 'snippet',
-               existing_type=sa.TEXT(),
-               nullable=False)
+    # op.drop_constraint('fk_messages_conversation_id_conversations', 'messages', type_='foreignkey')
+    # op.drop_constraint('fk_messages_claim_conversation_id', 'messages', type_='foreignkey')
+    # op.drop_constraint('fk_messages_claim_id_claims', 'messages', type_='foreignkey')
+    # op.drop_constraint('fk_messages_analysis_id_analysis', 'messages', type_='foreignkey')
+    # op.create_foreign_key(op.f('fk_messages_analysis_id_analysis'), 'messages', 'analysis', ['analysis_id'], ['id'])
+    # op.create_foreign_key(op.f('fk_messages_claim_id_claims'), 'messages', 'claims', ['claim_id'], ['id'])
+    # op.create_foreign_key(op.f('fk_messages_claim_conversation_id_claim_conversations'), 'messages', 'claim_conversations', ['claim_conversation_id'], ['id'])
+    # op.create_foreign_key(op.f('fk_messages_conversation_id_conversations'), 'messages', 'conversations', ['conversation_id'], ['id'])
+    # op.alter_column('sources', 'snippet',
+            #    existing_type=sa.TEXT(),
+            #    nullable=True)
     op.create_index(op.f('ix_sources_analysis_id'), 'sources', ['analysis_id'], unique=False)
     op.create_index(op.f('ix_sources_domain_id'), 'sources', ['domain_id'], unique=False)
     # ### end Alembic commands ###
@@ -114,17 +114,17 @@ def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
     op.drop_index(op.f('ix_sources_domain_id'), table_name='sources')
     op.drop_index(op.f('ix_sources_analysis_id'), table_name='sources')
-    op.alter_column('sources', 'snippet',
-               existing_type=sa.TEXT(),
-               nullable=True)
-    op.drop_constraint(op.f('fk_messages_conversation_id_conversations'), 'messages', type_='foreignkey')
-    op.drop_constraint(op.f('fk_messages_claim_conversation_id_claim_conversations'), 'messages', type_='foreignkey')
-    op.drop_constraint(op.f('fk_messages_claim_id_claims'), 'messages', type_='foreignkey')
-    op.drop_constraint(op.f('fk_messages_analysis_id_analysis'), 'messages', type_='foreignkey')
-    op.create_foreign_key('fk_messages_analysis_id_analysis', 'messages', 'analysis', ['analysis_id'], ['id'], ondelete='SET NULL')
-    op.create_foreign_key('fk_messages_claim_id_claims', 'messages', 'claims', ['claim_id'], ['id'], ondelete='SET NULL')
-    op.create_foreign_key('fk_messages_claim_conversation_id', 'messages', 'claim_conversations', ['claim_conversation_id'], ['id'], ondelete='SET NULL')
-    op.create_foreign_key('fk_messages_conversation_id_conversations', 'messages', 'conversations', ['conversation_id'], ['id'], ondelete='CASCADE')
+    # op.alter_column('sources', 'snippet',
+    #            existing_type=sa.TEXT(),
+    #            nullable=True)
+    # op.drop_constraint(op.f('fk_messages_conversation_id_conversations'), 'messages', type_='foreignkey')
+    # op.drop_constraint(op.f('fk_messages_claim_conversation_id_claim_conversations'), 'messages', type_='foreignkey')
+    # op.drop_constraint(op.f('fk_messages_claim_id_claims'), 'messages', type_='foreignkey')
+    # op.drop_constraint(op.f('fk_messages_analysis_id_analysis'), 'messages', type_='foreignkey')
+    # op.create_foreign_key('fk_messages_analysis_id_analysis', 'messages', 'analysis', ['analysis_id'], ['id'], ondelete='SET NULL')
+    # op.create_foreign_key('fk_messages_claim_id_claims', 'messages', 'claims', ['claim_id'], ['id'], ondelete='SET NULL')
+    # op.create_foreign_key('fk_messages_claim_conversation_id', 'messages', 'claim_conversations', ['claim_conversation_id'], ['id'], ondelete='SET NULL')
+    # op.create_foreign_key('fk_messages_conversation_id_conversations', 'messages', 'conversations', ['conversation_id'], ['id'], ondelete='CASCADE')
     op.drop_index(op.f('ix_messages_claim_id'), table_name='messages')
     op.drop_index(op.f('ix_messages_analysis_id'), table_name='messages')
     op.drop_index(op.f('ix_feedback_user_id'), table_name='feedback')
@@ -135,14 +135,14 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_conversations_user_id'), table_name='conversations')
     op.drop_index(op.f('ix_claims_user_id'), table_name='claims')
     op.create_index('ix_claims_status', 'claims', ['status'], unique=False)
-    op.alter_column('claims', 'context',
-               existing_type=sa.TEXT(),
-               nullable=True)
+    # op.alter_column('claims', 'context',
+    #            existing_type=sa.TEXT(),
+    #            nullable=True)
     op.drop_column('claims', 'language')
-    op.drop_constraint(op.f('fk_claim_conversations_conversation_id_conversations'), 'claim_conversations', type_='foreignkey')
-    op.drop_constraint(op.f('fk_claim_conversations_claim_id_claims'), 'claim_conversations', type_='foreignkey')
-    op.create_foreign_key('fk_claim_conversations_claim_id_claims', 'claim_conversations', 'claims', ['claim_id'], ['id'], ondelete='CASCADE')
-    op.create_foreign_key('fk_claim_conversations_conversation_id_conversations', 'claim_conversations', 'conversations', ['conversation_id'], ['id'], ondelete='CASCADE')
+    # op.drop_constraint(op.f('fk_claim_conversations_conversation_id_conversations'), 'claim_conversations', type_='foreignkey')
+    # op.drop_constraint(op.f('fk_claim_conversations_claim_id_claims'), 'claim_conversations', type_='foreignkey')
+    # op.create_foreign_key('fk_claim_conversations_claim_id_claims', 'claim_conversations', 'claims', ['claim_id'], ['id'], ondelete='CASCADE')
+    # op.create_foreign_key('fk_claim_conversations_conversation_id_conversations', 'claim_conversations', 'conversations', ['conversation_id'], ['id'], ondelete='CASCADE')
     op.drop_index(op.f('ix_claim_conversations_status'), table_name='claim_conversations')
     op.alter_column('claim_conversations', 'status',
                existing_type=sa.Enum('active', 'paused', 'completed', 'archived', name='conversation_status'),

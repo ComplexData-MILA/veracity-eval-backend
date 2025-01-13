@@ -91,12 +91,24 @@ def upgrade() -> None:
     )
 
     # Add updated_at column to all tables
-    tables = ["users", "claims", "analysis", "sources", "feedback", "conversations", "messages"]
+    tables = ["users", "claims", "analysis", "sources", "feedback", "conversations", "messages", "claim_conversations"]
     for table in tables:
         op.add_column(table, sa.Column("updated_at", sa.TIMESTAMP(), nullable=False, server_default=sa.text("now()")))
 
+    # ADD missing columns here 
+    # Created_at is missing from sources
+    # Created at is missing from conversations
+    # Created at is missing from messages
+    # Updated at is missing from claim conversations, DONE above
+    # Created at is missing from claim conversations 
+
+    tables = ["sources", "conversations", "messages", "claim_conversations"]
+    for table in tables:
+        op.add_column(table, sa.Column("created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=True))
 
 def downgrade() -> None:
+    #TODO take away the columns 
+
     # Remove indices
     op.drop_index("idx_message_claim_conversation_timestamp")
     op.drop_index("idx_message_conversation_timestamp")
