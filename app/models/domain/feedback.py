@@ -28,7 +28,7 @@ class Feedback:
             comment=model.comment,
             created_at=model.created_at,
             updated_at=model.updated_at,
-            labels=model.labels
+            labels=model.labels,
         )
 
     def to_model(self) -> "FeedbackModel":
@@ -39,5 +39,5 @@ class Feedback:
             user_id=self.user_id,
             rating=self.rating,
             comment=self.comment,
-            labels=self.labels
+            labels=self.labels,
         )

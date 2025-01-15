@@ -148,7 +148,7 @@ class GoogleWebSearchService(WebSearchServiceInterface):
 
         # Filter out sources with null credibility scores
         valid_scores = [source.credibility_score for source in sources if source.credibility_score is not None]
-        
+
         if not valid_scores:
             return 0.0  # Return 0.0 if no valid scores exist
 

@@ -343,7 +343,7 @@ class AnalysisOrchestrator:
         claim_conversation = ClaimConversation(
             id=uuid4(), conversation_id=conversation_id, claim_id=claim.id, start_time=datetime.now()
         )
-        # Create Claim Conversation does not exist, do I need to build out this method? 
+        # Create Claim Conversation does not exist, do I need to build out this method?
         await self._conversation_repo.create_claim_conversation(claim_conversation)
 
         yield {"type": "status", "content": "Analyzing claim..."}
@@ -425,7 +425,7 @@ class AnalysisOrchestrator:
             is_verifiable = await self._detect_claim(claim.claim_text)
             logger.debug(f"Claim verifiable check result: {is_verifiable}")
 
-            #Flagging behaviour to remove
+            # Flagging behaviour to remove
             if not is_verifiable:
                 yield {"type": "status", "content": "This doesn't appear to be a verifiable claim."}
                 await self._claim_repo.update_status(claim_id, ClaimStatus.rejected)

@@ -3,11 +3,12 @@ from datetime import datetime
 from uuid import UUID
 from typing import Optional, List
 
+
 class FeedbackCreate(BaseModel):
     analysis_id: UUID
     rating: float
     comment: str
-    labels: Optional[List[int]] = None 
+    labels: Optional[List[int]] = None
 
 
 class FeedbackRead(BaseModel):
@@ -32,4 +33,4 @@ class FeedbackList(BaseModel):
 class FeedbackUpdate(BaseModel):
     rating: float
     comment: str
-    labels: Optional[List[int]] = None 
+    labels: Optional[List[int]] = None
