@@ -4,6 +4,7 @@ __pycache__/
 .env.local
 .env
 .env.global
+.env.base
 .idea/
 .vscode/
 *.log
