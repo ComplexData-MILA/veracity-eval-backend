@@ -11,9 +11,11 @@ from sqlalchemy import (
     String,
     Boolean,
     Text,
+    Integer,
     Enum as SQLEnum,
     ForeignKey,
     text,
+    ARRAY,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -193,6 +195,8 @@ class FeedbackModel(Base):
         nullable=False,
         index=True,
     )
+
+    labels: Mapped[list[int]] = mapped_column(ARRAY(Integer), nullable=True)
 
     user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     rating: Mapped[float] = mapped_column(nullable=False)

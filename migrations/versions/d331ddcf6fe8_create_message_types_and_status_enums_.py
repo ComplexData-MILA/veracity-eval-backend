@@ -104,7 +104,7 @@ def upgrade() -> None:
 
     tables = ["sources", "conversations", "messages", "claim_conversations"]
     for table in tables:
-        op.add_column(table, sa.Column("created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=True))
+        op.add_column(table, sa.Column("created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False))
 
 def downgrade() -> None:
     #TODO take away the columns 

@@ -22,6 +22,7 @@ async def create_feedback(
             analysis_id=data.analysis_id,
             rating=data.rating,
             comment=data.comment,
+            labels=data.labels,
         )
         return FeedbackRead.model_validate(feedback)
     except (NotFoundException, DuplicateFeedbackError) as e:
