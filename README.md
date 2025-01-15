@@ -66,6 +66,7 @@ If you prefer to develop without Docker, you'll need to:
    ```
    pip install -r requirements.txt
    ```
+   Note, for proper dependencies, you will need python version 3.11
 
 3. Set up a PostgreSQL database and update the `.env` file with its URL.
 

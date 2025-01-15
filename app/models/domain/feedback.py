@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 
 from app.models.database.models import FeedbackModel
@@ -15,6 +15,7 @@ class Feedback:
     comment: Optional[str]
     created_at: datetime = None
     updated_at: datetime = None
+    labels: List[int] = None
 
     @classmethod
     def from_model(cls, model: "FeedbackModel") -> "Feedback":
@@ -27,6 +28,7 @@ class Feedback:
             comment=model.comment,
             created_at=model.created_at,
             updated_at=model.updated_at,
+            labels=model.labels,
         )
 
     def to_model(self) -> "FeedbackModel":
@@ -37,4 +39,5 @@ class Feedback:
             user_id=self.user_id,
             rating=self.rating,
             comment=self.comment,
+            labels=self.labels,
         )

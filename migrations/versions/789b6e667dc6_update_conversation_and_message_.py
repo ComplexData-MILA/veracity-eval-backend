@@ -80,7 +80,7 @@ def upgrade() -> None:
 
     # Add foreign key for claim_conversation_id in messages
     op.create_foreign_key(
-        "fk_messages_claim_conversation_id",
+        "fk_messages_claim_conversation_id_claim_conversations",
         "messages",
         "claim_conversations",
         ["claim_conversation_id"],

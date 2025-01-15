@@ -9,6 +9,7 @@ class ClaimCreate(BaseModel):
 
     claim_text: str
     context: str
+    language: str = "english"
 
 
 class ClaimStatusUpdate(BaseModel):
@@ -25,6 +26,7 @@ class ClaimRead(BaseModel):
     claim_text: str
     context: str
     status: str
+    language: str
     created_at: datetime
     updated_at: datetime
 

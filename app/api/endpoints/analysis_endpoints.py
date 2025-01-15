@@ -86,7 +86,12 @@ async def get_claim_analyses(
     current_user: User = Depends(get_current_user),
     analysis_service: AnalysisService = Depends(get_analysis_service),
 ) -> List[AnalysisRead]:
-    analyses = await analysis_service.get_claim_analyses(
-        claim_id=claim_id, include_sources=include_sources, include_feedback=include_feedback
-    )
-    return [AnalysisRead.model_validate(a) for a in analyses]
+    try:
+        logger.info("Fetching analysis...")
+        analyses = await analysis_service.get_claim_analyses(
+            claim_id=claim_id, include_sources=include_sources, include_feedback=include_feedback
+        )
+        return [AnalysisRead.model_validate(a) for a in analyses]
+    except Exception as e:
+        logger.error("Could not find the analysis for the claim")
+        raise HTTPException(status_code=500, detail=str(e))

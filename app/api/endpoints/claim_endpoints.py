@@ -21,7 +21,7 @@ async def create_claim(
     """Create a new claim for the authenticated user."""
     try:
         claim = await claim_service.create_claim(
-            user_id=current_user.id, claim_text=data.claim_text, context=data.context
+            user_id=current_user.id, claim_text=data.claim_text, context=data.context, language=data.language
         )
         return ClaimRead.model_validate(claim)
     except Exception as e:
@@ -58,6 +58,7 @@ async def get_claim(
 ) -> ClaimRead:
     """Get a specific claim by ID."""
     try:
+        print("entered")
         claim = await claim_service.get_claim(claim_id=claim_id, user_id=current_user.id)
         return ClaimRead.model_validate(claim)
     except NotFoundException:

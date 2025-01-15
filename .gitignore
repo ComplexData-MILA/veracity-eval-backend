@@ -10,4 +10,8 @@ __pycache__/
 *.log
 .mypy_cache/
 infrastructure/terraform/.terraform
+infrastructure/terraform/errored.tfstate
 service-account.json
+.env.global
+get-pip.py
+.DS_Store

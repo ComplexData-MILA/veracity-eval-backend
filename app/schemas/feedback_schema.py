@@ -1,12 +1,14 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from uuid import UUID
+from typing import Optional, List
 
 
 class FeedbackCreate(BaseModel):
     analysis_id: UUID
     rating: float
     comment: str
+    labels: Optional[List[int]] = None
 
 
 class FeedbackRead(BaseModel):
@@ -16,6 +18,7 @@ class FeedbackRead(BaseModel):
     rating: float
     comment: str
     created_at: datetime
+    labels: Optional[List[int]] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -30,3 +33,4 @@ class FeedbackList(BaseModel):
 class FeedbackUpdate(BaseModel):
     rating: float
     comment: str
+    labels: Optional[List[int]] = None

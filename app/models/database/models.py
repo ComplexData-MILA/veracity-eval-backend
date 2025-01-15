@@ -11,9 +11,11 @@ from sqlalchemy import (
     String,
     Boolean,
     Text,
+    Integer,
     Enum as SQLEnum,
     ForeignKey,
     text,
+    ARRAY,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -40,6 +42,7 @@ class ClaimStatus(str, enum.Enum):
     disputed = "disputed"
     verified = "verified"
     rejected = "rejected"
+    failed = "failed"
 
 
 class AnalysisStatus(str, enum.Enum):
@@ -104,10 +107,11 @@ class ClaimModel(Base):
     )
 
     claim_text: Mapped[str] = mapped_column(Text, nullable=False)
-    context: Mapped[str] = mapped_column(Text, nullable=False)
+    context: Mapped[str] = mapped_column(Text, nullable=True)
     status: Mapped[ClaimStatus] = mapped_column(
         SQLEnum(ClaimStatus, name="claim_status"), default=ClaimStatus.pending, nullable=False
     )
+    language: Mapped[str] = mapped_column(Text, nullable=False, server_default="english")
 
     user: Mapped["UserModel"] = relationship(back_populates="claims")
     analyses: Mapped[List["AnalysisModel"]] = relationship(back_populates="claim", cascade="all, delete-orphan")
@@ -122,7 +126,7 @@ class AnalysisModel(Base):
 
     claim_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("claims.id"), nullable=False, index=True)
     veracity_score: Mapped[float] = mapped_column(nullable=False)
-    confidence_score: Mapped[float] = mapped_column(nullable=False)
+    confidence_score: Mapped[float] = mapped_column(nullable=True)
     analysis_text: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[AnalysisStatus] = mapped_column(
         SQLEnum(AnalysisStatus, name="analysis_status"),
@@ -161,12 +165,12 @@ class SourceModel(Base):
         String(512),
         nullable=False,
     )
-    snippet: Mapped[str] = mapped_column(Text, nullable=False)
+    snippet: Mapped[str] = mapped_column(Text, nullable=True)
     domain_id: Mapped[Optional[UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("domains.id"), nullable=True, index=True
     )
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    credibility_score: Mapped[float] = mapped_column(Float, nullable=False)
+    credibility_score: Mapped[float] = mapped_column(Float, nullable=True)
 
     analysis: Mapped["AnalysisModel"] = relationship(back_populates="sources")
     domain: Mapped[Optional["DomainModel"]] = relationship(
@@ -176,7 +180,8 @@ class SourceModel(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "credibility_score >= 0 AND credibility_score <= 1", name="check_source_credibility_score_range"
+            "(credibility_score IS NULL OR (credibility_score >= 0 AND credibility_score <= 1))",
+            name="check_source_credibility_score_range",
         ),
         Index("idx_source_url_hash", text("md5(url)"), unique=True),
     )
@@ -192,6 +197,8 @@ class FeedbackModel(Base):
         index=True,
     )
 
+    labels: Mapped[list[int]] = mapped_column(ARRAY(Integer), nullable=True)
+
     user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     rating: Mapped[float] = mapped_column(nullable=False)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -206,15 +213,17 @@ class FeedbackModel(Base):
 
     __table_args__ = (
         CheckConstraint("rating >= 1 AND rating <= 5", name="check_rating_range"),
-        Index("idx_unique_user_analysis", analysis_id, user_id, unique=True),
+        Index("ix_unique_user_analysis", analysis_id, user_id, unique=True),
     )
 
 
 class ClaimConversationModel(Base):
     conversation_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("conversations.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    claim_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("claims.id"), nullable=False, index=True)
+    claim_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("claims.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     start_time: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -236,8 +245,8 @@ class ClaimConversationModel(Base):
 class MessageModel(Base):
     conversation_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("conversations.id"),
-        nullable=False,
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
     )
     sender_type: Mapped[MessageSenderType] = mapped_column(
@@ -248,16 +257,19 @@ class MessageModel(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
     claim_id: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("claims.id"), nullable=True, index=True
+        UUID(as_uuid=True), ForeignKey("claims.id", ondelete="SET NULL"), nullable=True, index=True
     )
     analysis_id: Mapped[Optional[UUID]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("analysis.id"),
+        ForeignKey("analysis.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
     claim_conversation_id: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("claim_conversations.id"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("claim_conversations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
 
     conversation: Mapped["ConversationModel"] = relationship(back_populates="messages")

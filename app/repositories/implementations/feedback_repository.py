@@ -22,6 +22,7 @@ class FeedbackRepository(BaseRepository[FeedbackModel, Feedback], FeedbackReposi
             user_id=feedback.user_id,
             rating=feedback.rating,
             comment=feedback.comment,
+            labels=feedback.labels,
         )
 
     def _to_domain(self, model: FeedbackModel) -> Feedback:
@@ -33,6 +34,7 @@ class FeedbackRepository(BaseRepository[FeedbackModel, Feedback], FeedbackReposi
             comment=model.comment,
             created_at=model.created_at,
             updated_at=model.updated_at,
+            labels=model.labels,
         )
 
     async def create(self, feedback: Feedback) -> Feedback:

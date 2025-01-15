@@ -20,6 +20,7 @@ class FeedbackService:
         analysis_id: UUID,
         rating: float,
         comment: Optional[str] = None,
+        labels: Optional[List[int]] = None,
     ) -> Feedback:
         """Create new feedback for an analysis."""
         analysis = await self._analysis_repo.get(analysis_id)
@@ -32,6 +33,7 @@ class FeedbackService:
             user_id=user_id,
             rating=rating,
             comment=comment,
+            labels=labels,
         )
 
         try:
@@ -55,6 +57,7 @@ class FeedbackService:
         user_id: UUID,
         rating: Optional[float] = None,
         comment: Optional[str] = None,
+        labels: Optional[List[int]] = None,
     ) -> Feedback:
         """Update existing feedback."""
         feedback = await self._feedback_repo.get(feedback_id)
@@ -68,5 +71,7 @@ class FeedbackService:
             feedback.rating = rating
         if comment is not None:
             feedback.comment = comment
+        if labels is not None:
+            feedback.labels = labels
 
         return await self._feedback_repo.update(feedback)
