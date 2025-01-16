@@ -8,7 +8,6 @@ echo "Waiting for database to be ready..."
 python scripts/wait_for_db.py
 
 echo "Running database migrations..."
-alembic stamp base
 alembic upgrade head
 
 echo "Starting the application..."

@@ -5,6 +5,7 @@ __pycache__/
 .env
 .env.global
 .env.base
+.localenv
 .idea/
 .vscode/
 *.log

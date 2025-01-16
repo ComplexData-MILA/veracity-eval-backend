@@ -51,7 +51,7 @@ async def get_analysis_sources(
         sources = await source_service.get_analysis_sources(
             analysis_id=analysis_id, user_id=current_user.id, include_content=include_content
         )
-        sorted_sources = sorted(sources, key=lambda x: (x["credibility_score"] is None, x["credibility_score"]))
+        sorted_sources = sorted(sources, key=lambda x: (x.credibility_score is None, x.credibility_score))
         return [SourceRead.model_validate(s) for s in sorted_sources]
     except NotFoundException as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
