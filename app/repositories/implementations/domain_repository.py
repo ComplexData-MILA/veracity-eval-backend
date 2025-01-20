@@ -54,7 +54,7 @@ class DomainRepository(BaseRepository[DomainModel, Domain], DomainRepositoryInte
         new_domain = Domain(
             id=uuid4(),
             domain_name=normalized_name,
-            credibility_score=0.5,  # TODO(wgarneau): Determine how to set this value
+            credibility_score=None,  
             is_reliable=False,
             description=None,
             created_at=datetime.now(UTC),

@@ -66,7 +66,7 @@ class UserModel(Base):
 
 class DomainModel(Base):
     domain_name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
-    credibility_score: Mapped[float] = mapped_column(Float, nullable=False)
+    credibility_score: Mapped[float] = mapped_column(Float, nullable=True)
     is_reliable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     __table_args__ = (
