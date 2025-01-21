@@ -129,7 +129,7 @@ class GoogleWebSearchService(WebSearchServiceInterface):
                 f"Source {i}:",
                 f"Title: {source.title}",
                 f"URL: {source.url}",
-                f"Credibility Score: {source.credibility_score:.2f}",
+                f"Credibility Score: {source.credibility_score:.2f}" if source.credibility_score is not None else "Credibility Score: N/A",
                 f"Excerpt: {source.snippet}",
             ]
 

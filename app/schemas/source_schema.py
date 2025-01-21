@@ -1,5 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 from uuid import UUID
+from typing import Optional
 
 
 class SourceCreate(BaseModel):
@@ -7,7 +8,7 @@ class SourceCreate(BaseModel):
     url: str
     title: str
     snippet: str
-    credibility_score: float
+    credibility_score: Optional[float]
 
 
 class SourceRead(BaseModel):
@@ -16,7 +17,7 @@ class SourceRead(BaseModel):
     url: str
     title: str
     snippet: str
-    credibility_score: float
+    credibility_score: Optional[float]
 
     model_config = ConfigDict(from_attributes=True)
 
