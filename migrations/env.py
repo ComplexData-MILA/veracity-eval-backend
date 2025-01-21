@@ -47,6 +47,7 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
+
 def include_object(object, name, type_, reflected, compare_to):
     # Check if the table has the `skip_autogenerate` flag in its `info`
     if type_ == "table" and name == "feedback_labels":
@@ -96,7 +97,7 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, 
+            connection=connection,
             target_metadata=target_metadata,
             include_object=include_object,
         )
