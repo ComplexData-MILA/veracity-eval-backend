@@ -150,12 +150,30 @@ class AnalysisModel(Base):
     )
 
 
-class SourceModel(Base):
-    __tablename__ = "sources"
+class SearchModel(Base):
+    __tablename__ = "searches"
 
     analysis_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("analysis.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    prompt: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    analysis: Mapped["AnalysisModel"] = relationship(back_populates="searches")
+
+
+class SourceModel(Base):
+    __tablename__ = "sources"
+
+    search_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("search.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -172,7 +190,7 @@ class SourceModel(Base):
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     credibility_score: Mapped[float] = mapped_column(Float, nullable=True)
 
-    analysis: Mapped["AnalysisModel"] = relationship(back_populates="sources")
+    search: Mapped["SearchModel"] = relationship(back_populates="sources")
     domain: Mapped[Optional["DomainModel"]] = relationship(
         "DomainModel",
         lazy="joined",

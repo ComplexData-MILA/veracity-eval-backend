@@ -4,7 +4,7 @@ from typing import Optional
 
 
 class SourceCreate(BaseModel):
-    analysis_id: UUID
+    search_id: UUID
     url: str
     title: str
     snippet: str
@@ -13,7 +13,7 @@ class SourceCreate(BaseModel):
 
 class SourceRead(BaseModel):
     id: UUID
-    analysis_id: UUID
+    search_id: UUID
     url: str
     title: str
     snippet: str

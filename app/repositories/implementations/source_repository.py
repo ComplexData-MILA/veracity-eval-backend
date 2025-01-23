@@ -23,8 +23,8 @@ class SourceRepository(BaseRepository[SourceModel, Source]):
         result = await self._session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_analysis(self, analysis_id: UUID, include_domain: bool = True) -> List[SourceModel]:
-        query = select(self._model_class).where(self._model_class.analysis_id == analysis_id)
+    async def get_by_search(self, search_id: UUID, include_domain: bool = True) -> List[SourceModel]:
+        query = select(self._model_class).where(self._model_class.search_id == search_id)
 
         if include_domain:
             query = query.options(selectinload(self._model_class.domain))

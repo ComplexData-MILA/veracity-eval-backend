@@ -11,7 +11,7 @@ class Source:
     """Domain model for web sources."""
 
     id: UUID
-    analysis_id: UUID
+    search_id: UUID
     url: str
     title: str
     snippet: str
@@ -26,7 +26,7 @@ class Source:
         """Create domain model from database model."""
         return cls(
             id=model.id,
-            analysis_id=model.analysis_id,
+            search_id=model.search_id,
             url=model.url,
             title=model.title,
             snippet=model.snippet,
@@ -41,7 +41,7 @@ class Source:
         """Convert to database model."""
         return SourceModel(
             id=self.id,
-            analysis_id=self.analysis_id,
+            search_id=self.search_id,
             url=self.url,
             title=self.title,
             snippet=self.snippet,

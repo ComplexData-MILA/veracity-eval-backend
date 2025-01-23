@@ -3,9 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import List
 from uuid import UUID
 
-from app.api.dependencies import get_source_service, get_current_user
+from app.api.dependencies import get_source_service, get_current_user, get_search_service
 from app.models.domain.user import User
 from app.services.source_service import SourceService
+from app.services.search_service import SearchService
 from app.schemas.source_schema import SourceRead, SourceList
 from app.core.exceptions import NotFoundException, NotAuthorizedException
 
@@ -41,6 +42,7 @@ async def get_analysis_sources(
     include_content: bool = Query(False, description="Include full source content in response"),
     current_user: User = Depends(get_current_user),
     source_service: SourceService = Depends(get_source_service),
+    search_service: SearchService = Depends(get_search_service),
 ) -> List[SourceRead]:
     """
     Get all sources used in a specific analysis.
@@ -48,9 +50,17 @@ async def get_analysis_sources(
     """
     # TODO include content does not do anything at the moment, it either needs to be removed or created
     try:
-        sources = await source_service.get_analysis_sources(
-            analysis_id=analysis_id, user_id=current_user.id, include_content=include_content
+        searches = await search_service.get_analysis_searches(
+            analysis_id=analysis_id, user_id=current_user.id
         )
+        sources=[]
+        for search in searches:
+            temp = await source_service.get_search_sources_without_auth_check(
+                search=search.analysis_id, user_id=current_user.id, include_content=include_content
+            )
+            sources.append(temp)
+
+
         sorted_sources = sorted(sources, key=lambda x: (x.credibility_score is None, x.credibility_score))
         return [SourceRead.model_validate(s) for s in sorted_sources]
     except NotFoundException as e:

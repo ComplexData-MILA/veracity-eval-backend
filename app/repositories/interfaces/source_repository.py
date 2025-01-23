@@ -18,8 +18,8 @@ class SourceRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def get_by_analysis(self, analysis_id: UUID, include_content: bool = False) -> List[Source]:
-        """Get all sources for an analysis."""
+    async def get_by_search(self, search_id: UUID, include_content: bool = False) -> List[Source]:
+        """Get all sources for a search."""
         pass
 
     @abstractmethod
