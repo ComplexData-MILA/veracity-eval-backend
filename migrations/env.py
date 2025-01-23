@@ -16,6 +16,7 @@ from app.models.database.models import (
     ConversationModel,
     ClaimModel,
     AnalysisModel,
+    SearchModel,
     SourceModel,
     FeedbackModel,
     ClaimConversationModel,
