@@ -24,7 +24,7 @@ class GoogleWebSearchService(WebSearchServiceInterface):
         self.source_repository = source_repository
 
     async def search_and_create_sources(
-        self, claim_text: str, analysis_id: UUID, num_results: int = 5
+        self, claim_text: str, search_id: UUID, num_results: int = 5
     ) -> List[SourceModel]:
         """Search for sources and create or update records."""
         try:
@@ -61,13 +61,13 @@ class GoogleWebSearchService(WebSearchServiceInterface):
 
                             if existing_source:
                                 updated_source = await self._update_source_analysis(
-                                    existing_source, analysis_id, domain.credibility_score
+                                    existing_source, search_id, domain.credibility_score
                                 )
                                 sources.append(updated_source)
                                 logger.debug(f"Updated existing source for URL: {item['link']}")
                             else:
                                 source = await self._create_new_source(
-                                    item, analysis_id, domain.id, domain.credibility_score
+                                    item, search_id, domain.id, domain.credibility_score
                                 )
                                 if source:
                                     sources.append(source)
@@ -87,20 +87,20 @@ class GoogleWebSearchService(WebSearchServiceInterface):
         return await self.source_repository.get_by_url(url)
 
     async def _update_source_analysis(
-        self, source: SourceModel, analysis_id: UUID, credibility_score: float
+        self, source: SourceModel, search_id: UUID, credibility_score: float
     ) -> SourceModel:
-        source.analysis_id = analysis_id
+        source.search_id = search_id
         source.credibility_score = credibility_score
         source.updated_at = datetime.now(UTC)
         return await self.source_repository.update(source)
 
     async def _create_new_source(
-        self, item: dict, analysis_id: UUID, domain_id: UUID, credibility_score: float
+        self, item: dict, search_id: UUID, domain_id: UUID, credibility_score: float
     ) -> Optional[SourceModel]:
         try:
             source = SourceModel(
                 id=uuid4(),
-                analysis_id=analysis_id,
+                search_id=search_id,
                 url=item["link"],
                 title=item["title"],
                 snippet=item["snippet"],
@@ -115,10 +115,10 @@ class GoogleWebSearchService(WebSearchServiceInterface):
             logger.warning(f"Race condition creating source for URL: {item['link']}")
             existing = await self._get_existing_source(item["link"])
             if existing:
-                return await self._update_source_analysis(existing, analysis_id, credibility_score)
+                return await self._update_source_analysis(existing, search_id, credibility_score)
             return None
 
-    def format_sources_for_prompt(self, sources: List[SourceModel]) -> str:
+    def format_sources_for_prompt(self, sources: List[SourceModel], language: str = "english") -> str:
         """Format sources into a string for the LLM prompt."""
         if not sources:
             return "No reliable sources found."

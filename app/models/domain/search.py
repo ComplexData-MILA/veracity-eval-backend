@@ -13,6 +13,7 @@ class Search:
     id: UUID
     analysis_id: UUID
     prompt: str
+    summary: str
     created_at: datetime
     updated_at: datetime
 
@@ -23,6 +24,7 @@ class Search:
             id=model.id,
             analysis_id=model.analysis_id,
             prompt=model.prompt,
+            summary=model.summary,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -33,4 +35,5 @@ class Search:
             id=self.id,
             analysis_id=self.analysis_id,
             prompt=self.prompt,
+            summary=self.summary,
         )

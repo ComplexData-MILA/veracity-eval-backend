@@ -164,6 +164,11 @@ class SearchModel(Base):
         Text,
         nullable=False,
     )
+    
+    summary: Mapped[str] = mapped_column(
+        Text,
+        nullable=True,
+    )
 
     analysis: Mapped["AnalysisModel"] = relationship(back_populates="searches")
 
@@ -173,7 +178,7 @@ class SourceModel(Base):
 
     search_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("search.id", ondelete="CASCADE"),
+        ForeignKey("searches.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

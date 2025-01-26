@@ -17,12 +17,15 @@ class SearchRepository(BaseRepository[SearchModel, Search]):
             id=search.id,
             analysis_id=search.analysis_id,
             prompt=search.prompt,
+            summary=search.summary
     )
 
     def _to_domain(self, model: SearchModel) -> Search:
         return Search(
             id=model.id,
             analysis_id=model.analysis_id,
+            prompt=model.prompt,
+            summary=model.summary,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
