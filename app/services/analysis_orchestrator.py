@@ -89,7 +89,7 @@ class AnalysisOrchestrator:
             yield {"type": "status", "content": "Searching for relevant sources..."}
 
             query = self._query_initial(claim_text)
-            messages = [[LLMMessage(role="user", content=query)]]
+            messages = [LLMMessage(role="user", content=query)]
             all_sources = []
             for turns in range(MAX_NUM_TURNS):
 
@@ -100,33 +100,35 @@ class AnalysisOrchestrator:
                     "Invalid Main Agent API response:",
                     response,
                 )
-                logging.info(main_agent_message)
+                # logging.info(messages)
+                # logging.info(main_agent_message)
                 # If search is requested in a message, truncate that message
                 # up to the search request. (Discard anything after the query.)
                 search_request_match = self._extract_search_query_or_none(main_agent_message)
                 if search_request_match is not None:
+                    # logging.info(search_request_match.content_up_to_match)
                     initial_search = Search(
                         id=uuid4(),
                         analysis_id=current_analysis.id,
                         prompt=search_request_match.matched_content,
-                        summary="",
+                        summary=search_request_match.content_up_to_match,
                         created_at=datetime.now(UTC),
                         updated_at=datetime.now(UTC),
                     )
-                    current_search = self._search_repo.create(initial_search)
-                    sources = self._web_search.search_and_create_sources(search_request_match.matched_content, current_search.id)
+                    current_search = await self._search_repo.create(initial_search)
+                    sources = await self._web_search.search_and_create_sources(search_request_match.matched_content, current_search.id)
                     
                     all_sources += sources
 
                     search_response = self._web_search.format_sources_for_prompt(sources)
 
                     messages += [
-                        {"role": "assistant", "content": search_request_match.content_up_to_match},
-                        {"role": "user", "content": f"Search result: {search_response}"},
+                        LLMMessage(role="assistant", content=main_agent_message),
+                        LLMMessage(role="user", content= f"Search result: {search_response}"),
                     ]
                     continue
                 else:
-                    messages += [{"role": "assistant", "content": main_agent_message}]
+                    messages += [LLMMessage(role="assistant", content=main_agent_message)]
 
                 if main_agent_message.strip().lower() == "ready":
                     break
@@ -154,6 +156,7 @@ class AnalysisOrchestrator:
             messages += [LLMMessage(role="user", content=AnalysisPrompt.GET_VERACITY)]
 
             analysis_text = []
+            logger.info(messages)
             async for chunk in self._llm.generate_stream(messages):
                 if not chunk.is_complete:
                     analysis_text.append(chunk.text)
@@ -180,6 +183,8 @@ class AnalysisOrchestrator:
                             pass
 
                         response_data = json.loads(cleaned_text)
+
+                        logger.info(response_data)
 
                         veracity_score = float(response_data.get("veracity_score", 0))
                         analysis_content = str(response_data.get("analysis", "No analysis provided"))
@@ -601,12 +606,13 @@ class AnalysisOrchestrator:
         return cleaned_text
 
 
-    def _query_initial(statement):
+    def _query_initial(self, statement: str):
 
         return AnalysisPrompt.ORCHESTRATOR_PROMPT.format(statement=statement)
 
 
     def _extract_search_query_or_none(
+        self,
         assistant_response: str,
     ) -> Optional[_KeywordExtractionOutput]:
         """
@@ -618,7 +624,28 @@ class AnalysisOrchestrator:
             _KeywordExtractionOutput if matched.
             None otherwise.
         """
-        match = re.search(r"(.*?SEARCH:\s+)(.+?)(\s*$)", assistant_response, re.DOTALL | re.MULTILINE)
+        match = re.search(r"^(?:REASON:\s*)?(.*?)\s*SEARCH:\s+(.+)$", assistant_response, re.DOTALL | re.MULTILINE)
+        if match is None:
+            return None
+        return _KeywordExtractionOutput(
+            content_up_to_match=match.group(1),
+            matched_content=match.group(2),
+        )
+    
+    def _extract_search_summary_or_none(
+        self,
+        assistant_response: str,
+    ) -> Optional[_KeywordExtractionOutput]:
+        """
+        Try to extract "SEARCH: query\\n" request from the main agent response.
+
+        Discards anything after the "query" part.
+
+        Returns:
+            _KeywordExtractionOutput if matched.
+            None otherwise.
+        """
+        match = re.search(r"(.*?SUMMARY:\s+)(.+?)(\s*$)", assistant_response, re.DOTALL | re.MULTILINE)
         if match is None:
             return None
         return _KeywordExtractionOutput(
@@ -627,7 +654,7 @@ class AnalysisOrchestrator:
         )
 
 
-    def _extract_prediction_or_none(assistant_response: str) -> Optional[str]:
+    def _extract_prediction_or_none(self, assistant_response: str) -> Optional[str]:
         """
         Try to extract "Factuality: 0 to 1" from main agent response.
 

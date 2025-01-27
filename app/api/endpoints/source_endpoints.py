@@ -56,12 +56,13 @@ async def get_analysis_sources(
         sources=[]
         for search in searches:
             temp = await source_service.get_search_sources_without_auth_check(
-                search=search.analysis_id, user_id=current_user.id, include_content=include_content
+                search_id=search.id, user_id=current_user.id, include_content=include_content
             )
             sources.append(temp)
 
+        flat_sources = [item for sublist in sources for item in sublist]
 
-        sorted_sources = sorted(sources, key=lambda x: (x.credibility_score is None, x.credibility_score))
+        sorted_sources = sorted(flat_sources, key=lambda x: (x.credibility_score is None, x.credibility_score))
         return [SourceRead.model_validate(s) for s in sorted_sources]
     except NotFoundException as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

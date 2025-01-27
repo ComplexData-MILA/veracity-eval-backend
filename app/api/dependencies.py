@@ -168,6 +168,7 @@ async def get_orchestrator_service(
     claim_conversation_repository: ClaimConversationRepository = Depends(get_claim_conversation_repository),
     message_repository: MessageRepository = Depends(get_message_repository),
     source_repository: SourceRepository = Depends(get_source_repository),
+    search_repository: SearchRepository = Depends(get_search_repository),
     web_search_service: WebSearchServiceInterface = Depends(get_web_search_service),
     llm_provider=Depends(get_llm_provider),
 ) -> AnalysisOrchestrator:
@@ -180,6 +181,7 @@ async def get_orchestrator_service(
         claim_conversation_repo=claim_conversation_repository,
         message_repo=message_repository,
         source_repo=source_repository,
+        search_repo=search_repository,
         web_search_service=web_search_service,
         llm_provider=llm_provider,
     )

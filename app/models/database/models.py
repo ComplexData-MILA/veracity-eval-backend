@@ -136,7 +136,7 @@ class AnalysisModel(Base):
     )
 
     claim: Mapped["ClaimModel"] = relationship(back_populates="analyses", doc="Related claim")
-    sources: Mapped[List["SourceModel"]] = relationship(back_populates="analysis", cascade="all, delete-orphan")
+    searches: Mapped[List["SearchModel"]] = relationship(back_populates="analysis", cascade="all, delete-orphan")
     feedbacks: Mapped[List["FeedbackModel"]] = relationship(
         back_populates="analysis",
         cascade="all, delete-orphan",
@@ -171,6 +171,8 @@ class SearchModel(Base):
     )
 
     analysis: Mapped["AnalysisModel"] = relationship(back_populates="searches")
+
+    sources: Mapped[List["SourceModel"]] = relationship(back_populates="search", cascade="all, delete-orphan")
 
 
 class SourceModel(Base):
