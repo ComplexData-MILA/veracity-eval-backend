@@ -50,10 +50,8 @@ async def get_analysis_sources(
     """
     # TODO include content does not do anything at the moment, it either needs to be removed or created
     try:
-        searches = await search_service.get_analysis_searches(
-            analysis_id=analysis_id, user_id=current_user.id
-        )
-        sources=[]
+        searches = await search_service.get_analysis_searches(analysis_id=analysis_id, user_id=current_user.id)
+        sources = []
         for search in searches:
             temp = await source_service.get_search_sources_without_auth_check(
                 search_id=search.id, user_id=current_user.id, include_content=include_content
@@ -74,7 +72,7 @@ async def get_analysis_sources(
 
 
 @router.get("/search/{search_id}", response_model=List[SourceRead], summary="Get search sources")
-async def get_analysis_sources(
+async def get_search_sources(
     search_id: UUID,
     include_content: bool = Query(False, description="Include full source content in response"),
     current_user: User = Depends(get_current_user),
@@ -86,7 +84,7 @@ async def get_analysis_sources(
     """
     # TODO include content does not do anything at the moment, it either needs to be removed or created
     try:
-        sources= await source_service.get_search_sources(
+        sources = await source_service.get_search_sources(
             search_id=search_id, user_id=current_user.id, include_content=include_content
         )
         return [SourceRead.model_validate(s) for s in sources]
@@ -97,6 +95,7 @@ async def get_analysis_sources(
     except Exception as e:
         logger.error(f"Error getting sources: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve sources")
+
 
 @router.get("/domain/{domain_id}", response_model=SourceList, summary="Get domain sources")
 async def get_domain_sources(

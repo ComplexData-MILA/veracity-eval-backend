@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import List
 from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,12 +13,7 @@ class SearchRepository(BaseRepository[SearchModel, Search]):
         super().__init__(session, SearchModel)
 
     def _to_model(self, search: Search) -> SearchModel:
-        return SearchModel(
-            id=search.id,
-            analysis_id=search.analysis_id,
-            prompt=search.prompt,
-            summary=search.summary
-    )
+        return SearchModel(id=search.id, analysis_id=search.analysis_id, prompt=search.prompt, summary=search.summary)
 
     def _to_domain(self, model: SearchModel) -> Search:
         return Search(
@@ -29,6 +24,7 @@ class SearchRepository(BaseRepository[SearchModel, Search]):
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
+
     async def get_by_analysis(self, analysis_id: UUID) -> List[SearchModel]:
         query = select(self._model_class).where(self._model_class.analysis_id == analysis_id)
 

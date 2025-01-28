@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List, Tuple
+from typing import Optional, List
 from uuid import UUID
 from app.models.domain.search import Search
 

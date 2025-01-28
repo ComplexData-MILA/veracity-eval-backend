@@ -1,13 +1,12 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
 from uuid import UUID
 
-from app.api.dependencies import get_source_service, get_current_user, get_search_service, get_analysis_service
+from app.api.dependencies import get_current_user, get_search_service
 from app.models.domain.user import User
-from app.services.source_service import SourceService
 from app.services.search_service import SearchService
-from app.schemas.search_schema import SearchRead, SearchList
+from app.schemas.search_schema import SearchRead
 from app.core.exceptions import NotFoundException, NotAuthorizedException
 
 logger = logging.getLogger(__name__)
@@ -25,9 +24,7 @@ async def get_search(
     Includes authorization check to ensure user has access to the analysis this source belongs to.
     """
     try:
-        search = await search_service.get_search(
-            search_id=search_id, user_id=current_user.id
-        )
+        search = await search_service.get_search(search_id=search_id, user_id=current_user.id)
         return SearchRead.model_validate(search)
     except NotFoundException as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -48,9 +45,7 @@ async def get_analysis_searches(
     """
     # TODO include content does not do anything at the moment, it either needs to be removed or created
     try:
-        searches = await search_service.get_analysis_searches(
-            analysis_id=analysis_id, user_id=current_user.id
-        )
+        searches = await search_service.get_analysis_searches(analysis_id=analysis_id, user_id=current_user.id)
 
         return [SearchRead.model_validate(s) for s in searches]
     except NotFoundException as e:
@@ -60,5 +55,3 @@ async def get_analysis_searches(
     except Exception as e:
         logger.error(f"Error getting searches: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve searches")
-
-

@@ -1,5 +1,5 @@
 import logging
-from typing import List, Tuple
+from typing import List
 from uuid import UUID
 
 from app.models.domain.search import Search
@@ -46,9 +46,7 @@ class SearchService:
 
         return search
 
-    async def get_analysis_searches(
-        self, analysis_id: UUID, user_id: UUID
-    ) -> List[Search]:
+    async def get_analysis_searches(self, analysis_id: UUID, user_id: UUID) -> List[Search]:
         """Get all searches for an analysis with authorization check."""
         logger.debug(f"Getting searches for analysis {analysis_id} for user {user_id}")
 

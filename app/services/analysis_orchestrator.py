@@ -1,10 +1,9 @@
 import logging
-from typing import AsyncGenerator, Dict, Any, List, Optional
+from typing import AsyncGenerator, Dict, Any, List, Optional, NamedTuple
 from uuid import UUID, uuid4
 from datetime import UTC, datetime
 import json
 import re
-from typing import Any, Optional, NamedTuple
 
 from app.core.exceptions import NotAuthorizedException, NotFoundException
 from app.core.llm.interfaces import LLMProvider
@@ -32,10 +31,13 @@ logger = logging.getLogger(__name__)
 MAX_NUM_TURNS: int = 10
 MAX_SEARCH_RESULTS: int = 10
 
+
 class _KeywordExtractionOutput(NamedTuple):
     """Represent the part up to the matched string, and the match itself."""
+
     content_up_to_match: str
     matched_content: str
+
 
 class AnalysisState:
     def __init__(self):
@@ -94,7 +96,7 @@ class AnalysisOrchestrator:
             for turns in range(MAX_NUM_TURNS):
 
                 response = await self._llm.generate_response(messages)
-                
+
                 main_agent_message = response.text
                 assert main_agent_message is not None, (
                     "Invalid Main Agent API response:",
@@ -116,15 +118,17 @@ class AnalysisOrchestrator:
                         updated_at=datetime.now(UTC),
                     )
                     current_search = await self._search_repo.create(initial_search)
-                    sources = await self._web_search.search_and_create_sources(search_request_match.matched_content, current_search.id)
-                    
+                    sources = await self._web_search.search_and_create_sources(
+                        search_request_match.matched_content, current_search.id
+                    )
+
                     all_sources += sources
 
                     search_response = self._web_search.format_sources_for_prompt(sources)
 
                     messages += [
                         LLMMessage(role="assistant", content=main_agent_message),
-                        LLMMessage(role="user", content= f"Search result: {search_response}"),
+                        LLMMessage(role="user", content=f"Search result: {search_response}"),
                     ]
                     continue
                 else:
@@ -132,7 +136,6 @@ class AnalysisOrchestrator:
 
                 if main_agent_message.strip().lower().endswith("ready"):
                     break
-
 
             source_credibility = self._web_search.calculate_overall_credibility(all_sources)
 
@@ -148,9 +151,7 @@ class AnalysisOrchestrator:
                 }
 
             sources_text = self._web_search.format_sources_for_prompt(all_sources)
-
-            
-
+            logger.debug(f"Sources for all searches to be analyzed {sources_text}")
             yield {"type": "status", "content": "Analyzing claim with gathered sources..."}
 
             messages += [LLMMessage(role="user", content=AnalysisPrompt.GET_VERACITY)]
@@ -257,7 +258,6 @@ class AnalysisOrchestrator:
             logger.error(f"Error in _generate_analysis: {str(e)}", exc_info=True)
             yield {"type": "error", "content": str(e)}
             raise
-
 
     async def initialize_claim_conversation(
         self,
@@ -600,16 +600,13 @@ class AnalysisOrchestrator:
             yield {"type": "error", "content": str(e)}
             raise
 
-
     def clean_text(text):
-        cleaned_text = re.sub(r"[^a-zA-Z,.?!' ]", '', text)
+        cleaned_text = re.sub(r"[^a-zA-Z,.?!' ]", "", text)
         return cleaned_text
-
 
     def _query_initial(self, statement: str):
 
         return AnalysisPrompt.ORCHESTRATOR_PROMPT.format(statement=statement)
-
 
     def _extract_search_query_or_none(
         self,
@@ -631,7 +628,7 @@ class AnalysisOrchestrator:
             content_up_to_match=match.group(1),
             matched_content=match.group(2),
         )
-    
+
     def _extract_search_summary_or_none(
         self,
         assistant_response: str,
@@ -652,7 +649,6 @@ class AnalysisOrchestrator:
             content_up_to_match=match.group(1) + match.group(2),
             matched_content=match.group(2),
         )
-
 
     def _extract_prediction_or_none(self, assistant_response: str) -> Optional[str]:
         """

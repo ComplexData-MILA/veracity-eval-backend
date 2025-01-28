@@ -164,7 +164,7 @@ class SearchModel(Base):
         Text,
         nullable=False,
     )
-    
+
     summary: Mapped[str] = mapped_column(
         Text,
         nullable=True,

@@ -30,7 +30,7 @@ class SourceService:
 
     async def _check_analysis_access(self, search_id: UUID, user_id: UUID) -> bool:
         """Check if user has access to the analysis."""
-        
+
         search = await self._search_repo.get(search_id)
         if not search:
             raise NotFoundException("Search not found")
@@ -57,9 +57,7 @@ class SourceService:
 
         return source
 
-    async def get_search_sources(
-        self, search_id: UUID, user_id: UUID, include_content: bool = False
-    ) -> List[Source]:
+    async def get_search_sources(self, search_id: UUID, user_id: UUID, include_content: bool = False) -> List[Source]:
         """Get all sources for an analysis with authorization check."""
         logger.debug(f"Getting sources for search {search_id} for user {user_id}")
 
@@ -104,7 +102,7 @@ class SourceService:
             raise NotFoundException("Domain not found")
 
         # Get all sources for the domain
-        #TODO Check method definition
+        # TODO Check method definition
         sources, total = await self._source_repo.get_by_domain(domain_id=domain_id, limit=limit, offset=offset)
 
         # Filter sources based on user access
@@ -122,7 +120,7 @@ class SourceService:
         self, query: str, user_id: UUID, limit: int = 50, offset: int = 0
     ) -> Tuple[List[Source], int]:
         """Search through sources with authorization check."""
-        #TODO Check method definition
+        # TODO Check method definition
         sources, total = await self._source_repo.search_sources(query=query, limit=limit, offset=offset)
 
         # Filter sources based on user access
