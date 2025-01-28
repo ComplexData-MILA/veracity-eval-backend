@@ -62,7 +62,7 @@ async def get_analysis_sources(
 
         flat_sources = [item for sublist in sources for item in sublist]
 
-        sorted_sources = sorted(flat_sources, key=lambda x: (x.credibility_score is None, x.credibility_score))
+        sorted_sources = sorted(flat_sources, key=lambda x: (x.credibility_score is None, -(x.credibility_score or 0)))
         return [SourceRead.model_validate(s) for s in sorted_sources]
     except NotFoundException as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

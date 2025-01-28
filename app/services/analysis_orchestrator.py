@@ -130,7 +130,7 @@ class AnalysisOrchestrator:
                 else:
                     messages += [LLMMessage(role="assistant", content=main_agent_message)]
 
-                if main_agent_message.strip().lower() == "ready":
+                if main_agent_message.strip().lower().endswith("ready"):
                     break
 
 

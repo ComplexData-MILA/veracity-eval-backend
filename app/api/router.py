@@ -4,6 +4,7 @@ from app.api.endpoints import (
     claim_endpoints,
     analysis_endpoints,
     source_endpoints,
+    search_endpoints,
     feedback_endpoints,
     conversation_endpoints,
     message_endpoints,
@@ -18,6 +19,7 @@ router.include_router(user_endpoints.router, tags=["users"])
 router.include_router(claim_endpoints.router, tags=["claims"])
 router.include_router(analysis_endpoints.router, tags=["analysis"])
 router.include_router(source_endpoints.router, tags=["sources"])
+router.include_router(search_endpoints.router, tags=["searches"])
 router.include_router(feedback_endpoints.router, tags=["feedback"])
 router.include_router(conversation_endpoints.router, tags=["conversations"])
 router.include_router(message_endpoints.router, tags=["messages"])
