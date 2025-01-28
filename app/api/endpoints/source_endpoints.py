@@ -73,6 +73,31 @@ async def get_analysis_sources(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve sources")
 
 
+@router.get("/search/{search_id}", response_model=List[SourceRead], summary="Get search sources")
+async def get_analysis_sources(
+    search_id: UUID,
+    include_content: bool = Query(False, description="Include full source content in response"),
+    current_user: User = Depends(get_current_user),
+    source_service: SourceService = Depends(get_source_service),
+) -> List[SourceRead]:
+    """
+    Get all sources used in a specific analysis.
+    Verifies that the user has access to the analysis before returning sources.
+    """
+    # TODO include content does not do anything at the moment, it either needs to be removed or created
+    try:
+        sources= await source_service.get_search_sources(
+            search_id=search_id, user_id=current_user.id, include_content=include_content
+        )
+        return [SourceRead.model_validate(s) for s in sources]
+    except NotFoundException as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except NotAuthorizedException:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access these sources")
+    except Exception as e:
+        logger.error(f"Error getting sources: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve sources")
+
 @router.get("/domain/{domain_id}", response_model=SourceList, summary="Get domain sources")
 async def get_domain_sources(
     domain_id: UUID,
