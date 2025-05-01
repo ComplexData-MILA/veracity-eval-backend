@@ -116,6 +116,7 @@ tenacity==9.0.0
 tiktoken==0.8.0
 tld==0.13
 tqdm==4.66.6
+trafilatura==2.0.0
 typer==0.12.5
 typing_extensions==4.12.2
 ujson==5.10.0

@@ -121,7 +121,7 @@ class AnalysisOrchestrator:
                     )
                     current_search = await self._search_repo.create(initial_search)
                     sources = await self._web_search.search_and_create_sources(
-                        claim_text=search_request_match.matched_content, search_id=current_search.id, language=language
+                        claim_text=search_request_match.matched_content, search_id=current_search.id, language=language, option=[1]
                     )
 
                     all_sources += sources

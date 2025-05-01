@@ -5,6 +5,8 @@ import logging
 from uuid import UUID, uuid4
 from app.core.config import settings
 from sqlalchemy.exc import IntegrityError
+import trafilatura
+import json
 
 from app.core.exceptions import ValidationError
 from app.models.database.models import SourceModel
@@ -25,7 +27,7 @@ class GoogleWebSearchService(WebSearchServiceInterface):
         self.source_repository = source_repository
 
     async def search_and_create_sources(
-        self, claim_text: str, search_id: UUID, num_results: int = 5, language: str = "english"
+        self, claim_text: str, search_id: UUID, num_results: int = 5, language: str = "english", option: List[int] = []
     ) -> List[SourceModel]:
         """Search for sources and create or update records."""
         try:
@@ -34,7 +36,7 @@ class GoogleWebSearchService(WebSearchServiceInterface):
                 "cx": self.search_engine_id,
                 "q": claim_text,
                 "num": min(num_results, 10),
-                "fields": "items(title,link,snippet)",
+                "fields": "items(title,link,snippet,pagemap)",
             }
             if language == "english":
                 params = {
@@ -42,7 +44,7 @@ class GoogleWebSearchService(WebSearchServiceInterface):
                     "cx": self.search_engine_id,
                     "q": claim_text,
                     "num": min(num_results, 10),
-                    "fields": "items(title,link,snippet)",
+                    "fields": "items(title,link,snippet,pagemap)",
                     "lr": "lang_en",
                 }
             elif language == "french":
@@ -51,10 +53,10 @@ class GoogleWebSearchService(WebSearchServiceInterface):
                     "cx": self.search_engine_id,
                     "q": claim_text,
                     "num": min(num_results, 10),
-                    "fields": "items(title,link,snippet)",
+                    "fields": "items(title,link,snippet,pagemap)",
                     "lr": "lang_fr",
                 }
-
+            
             sources = []
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.search_endpoint, params=params) as response:
@@ -76,7 +78,10 @@ class GoogleWebSearchService(WebSearchServiceInterface):
                             if is_new:
                                 logger.info(f"Created new domain record for: {domain_name}")
 
-                            source = await self._create_new_source(item, search_id, domain.id, domain.credibility_score)
+                            metadata=False
+                            if 1 in option:
+                               metadata = True
+                            source = await self._create_new_source(item, search_id, domain.id, domain.credibility_score, metadata=metadata)
                             if source:
                                 sources.append(source)
                                 logger.debug(f"Created new source for URL: {item['link']}")
@@ -103,9 +108,18 @@ class GoogleWebSearchService(WebSearchServiceInterface):
         return await self.source_repository.update(source)
 
     async def _create_new_source(
-        self, item: dict, search_id: UUID, domain_id: UUID, credibility_score: float
+        self, item: dict, search_id: UUID, domain_id: UUID, credibility_score: float, metadata: bool
     ) -> Optional[SourceModel]:
         try:
+            content = None
+            if metadata:
+                pagemap = item.get("pagemap", {})
+                metatags = pagemap.get("metatags", [])
+                if metatags:
+                    content = await self._process_metadata(metatags, item["link"])
+                else:
+                    content = None
+            logger.info(f"content {content}")
             source = SourceModel(
                 id=uuid4(),
                 search_id=search_id,
@@ -113,7 +127,7 @@ class GoogleWebSearchService(WebSearchServiceInterface):
                 title=item["title"],
                 snippet=item["snippet"],
                 domain_id=domain_id,
-                content=None,
+                content=content,
                 credibility_score=credibility_score,
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC),
@@ -126,6 +140,39 @@ class GoogleWebSearchService(WebSearchServiceInterface):
                 return await self._update_source_analysis(existing, search_id, credibility_score)
             return None
 
+    async def _process_metadata(
+        self, metatags, link 
+    ) -> str:
+        try:
+            if metatags:
+                meta = metatags[0]  # usually only one dict
+                published_date = meta.get("article:published_time") or meta.get("og:published_time") or meta.get("date") or meta.get("pubdate")
+                return published_date
+            else:
+                publish_date = await self._extract_publish_date_from_url(link)
+                if publish_date:
+                    return publish_date
+                else:
+                    return ""
+        except Exception as e:
+            logger.info(f"no metadata found {e}")
+            return ""
+
+    async def _extract_publish_date_from_url(url: str) -> Optional[str]:
+        downloaded = trafilatura.fetch_url(url)
+        if not downloaded:
+            return ""
+
+        result = trafilatura.extract(downloaded, include_metadata=True, output_format="json")
+        if result:
+            metadata = json.loads(result)
+            publish_date = metadata.get("date")
+            if publish_date:
+                logger.info(f"Pulled the date from trafilatura: {publish_date}")
+                return publish_date
+
+        return ""
+    
     def format_sources_for_prompt(self, sources: List[SourceModel], language: str = "english") -> str:
         """Format sources into a string for the LLM prompt."""
         if language == "english":

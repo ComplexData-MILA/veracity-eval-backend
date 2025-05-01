@@ -62,11 +62,11 @@ class WordCloudRequest(BaseModel):
 class SuccessResult(BaseModel):
     claim_id: UUID
     analysis_id: UUID
-    batch_user_id: str
-    batch_post_id: str
     veracity_score: float
     average_source_credibility: float
     num_sources: int
+    batch_user_id: Optional[str]
+    batch_post_id: Optional[str]
 
 
 class FailureResult(BaseModel):

@@ -7,7 +7,7 @@ from app.models.database.models import SourceModel
 class WebSearchServiceInterface(ABC):
     @abstractmethod
     async def search_and_create_sources(
-        self, claim_text: str, search_id: UUID, num_results: int = 5, language: str = "english"
+        self, claim_text: str, search_id: UUID, num_results: int = 5, language: str = "english", option: List[int] = []
     ) -> List[SourceModel]:
         pass
 
@@ -23,8 +23,14 @@ class WebSearchServiceInterface(ABC):
 
     @abstractmethod
     async def _create_new_source(
-        self, item: dict, search_id: UUID, domain_id: UUID, credibility_score: float
+        self, item: dict, search_id: UUID, domain_id: UUID, credibility_score: float, metadata: bool
     ) -> Optional[SourceModel]:
+        pass
+
+    @abstractmethod
+    async def _process_metadata(
+        self, metatags 
+    ) -> str:
         pass
 
     @abstractmethod
