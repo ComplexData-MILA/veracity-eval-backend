@@ -126,7 +126,7 @@ class AnalysisOrchestrator:
 
                     all_sources += sources
 
-                    search_response = self._web_search.format_sources_for_prompt(sources, language)
+                    search_response = self._web_search.format_sources_for_prompt(sources, language, option=[1])
 
                     if language == "english":
                         messages += [
@@ -667,10 +667,13 @@ class AnalysisOrchestrator:
         cleaned_text = re.sub(r"[^a-zA-Z,.?!' ]", "", text)
         return cleaned_text
 
-    def _query_initial(self, statement: str, language: str):
+    def _query_initial(self, statement: str, language: str, option: List[int] = []):
 
         if language == "english":
-            return AnalysisPrompt.ORCHESTRATOR_PROMPT.format(statement=statement, date=datetime.now().isoformat())
+            if 2 in option: 
+                return AnalysisPrompt.ORCHESTRATOR_PROMPT.format(statement=statement, date=datetime.now().isoformat())
+            else:  
+                return AnalysisPrompt.ORCHESTRATOR_PROMPT.format(statement=statement, date=datetime.now().isoformat())
         elif language == "french":
             return AnalysisPrompt.ORCHESTRATOR_PROMPT_FR.format(statement=statement, date=datetime.now().isoformat())
         else:

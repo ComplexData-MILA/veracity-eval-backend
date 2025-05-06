@@ -111,6 +111,7 @@ class GoogleWebSearchService(WebSearchServiceInterface):
         self, item: dict, search_id: UUID, domain_id: UUID, credibility_score: float, metadata: bool
     ) -> Optional[SourceModel]:
         try:
+            # With metadata = true, set content to the date, if it can be found
             content = None
             if metadata:
                 pagemap = item.get("pagemap", {})
@@ -173,23 +174,38 @@ class GoogleWebSearchService(WebSearchServiceInterface):
 
         return ""
     
-    def format_sources_for_prompt(self, sources: List[SourceModel], language: str = "english") -> str:
+    def format_sources_for_prompt(self, sources: List[SourceModel], language: str = "english", option: List[int]=[]) -> str:
         """Format sources into a string for the LLM prompt."""
         if language == "english":
             if not sources:
                 return "No reliable sources found."
 
             formatted_sources = []
+            
             for i, source in enumerate(sources, 1):
-                source_info = [
-                    f"Source {i}:",
-                    f"Title: {source.title}",
-                    f"URL: {source.url}",
-                    f"Credibility Score: {source.credibility_score:.2f}"
-                    if source.credibility_score is not None
-                    else "Credibility Score: N/A",
-                    f"Excerpt: {source.snippet}",
-                ]
+                if 1 in option:
+                    source_info = [
+                        f"Source {i}:",
+                        f"Title: {source.title}",
+                        f"URL: {source.url}",
+                        f"Credibility Score: {source.credibility_score:.2f}"
+                        if source.credibility_score is not None
+                        else "Credibility Score: N/A",
+                        f"Date Created: {source.content}" 
+                        if source.content is not None
+                        else "Date Created: unknown",
+                        f"Excerpt: {source.snippet}",
+                    ]
+                else:
+                    source_info = [
+                        f"Source {i}:",
+                        f"Title: {source.title}",
+                        f"URL: {source.url}",
+                        f"Credibility Score: {source.credibility_score:.2f}"
+                        if source.credibility_score is not None
+                        else "Credibility Score: N/A",
+                        f"Excerpt: {source.snippet}",
+                    ]
 
                 if hasattr(source, "domain") and source.domain and source.domain.description:
                     source_info.append(f"Domain Info: {source.domain.description}")
