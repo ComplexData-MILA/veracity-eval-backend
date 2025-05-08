@@ -7,7 +7,7 @@ from app.models.database.models import SourceModel
 class WebSearchServiceInterface(ABC):
     @abstractmethod
     async def search_and_create_sources(
-        self, claim_text: str, search_id: UUID, num_results: int = 5, language: str = "english", option: List[int] = []
+        self, claim_text: str, search_id: UUID, num_results: int = 5, language: str = "english", option: List[int] = [], date_restrict: Optional[str] = None
     ) -> List[SourceModel]:
         pass
 
@@ -34,7 +34,7 @@ class WebSearchServiceInterface(ABC):
         pass
 
     @abstractmethod
-    def format_sources_for_prompt(self, sources: List[SourceModel], language: str = "english") -> str:
+    def format_sources_for_prompt(self, sources: List[SourceModel], language: str = "english", option: List[int]=[], date_restrict: Optional[str] = None) -> str:
         pass
 
     @abstractmethod

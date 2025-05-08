@@ -27,7 +27,7 @@ class GoogleWebSearchService(WebSearchServiceInterface):
         self.source_repository = source_repository
 
     async def search_and_create_sources(
-        self, claim_text: str, search_id: UUID, num_results: int = 5, language: str = "english", option: List[int] = []
+        self, claim_text: str, search_id: UUID, num_results: int = 5, language: str = "english", option: List[int] = [], date_restrict: Optional[str] = None
     ) -> List[SourceModel]:
         """Search for sources and create or update records."""
         try:
@@ -38,15 +38,28 @@ class GoogleWebSearchService(WebSearchServiceInterface):
                 "num": min(num_results, 10),
                 "fields": "items(title,link,snippet,pagemap)",
             }
+            
             if language == "english":
-                params = {
-                    "key": self.api_key,
-                    "cx": self.search_engine_id,
-                    "q": claim_text,
-                    "num": min(num_results, 10),
-                    "fields": "items(title,link,snippet,pagemap)",
-                    "lr": "lang_en",
-                }
+                if 2 in option and date_restrict:
+                    start_date, end_date = [d.strip() for d in date_restrict.split("to")]
+                    logging.info(f"{claim_text} after:{start_date} before:{end_date}")
+                    params = {
+                        "key": self.api_key,
+                        "cx": self.search_engine_id,
+                        "q": f"{claim_text} after:{start_date} before:{end_date}",
+                        "num": min(num_results, 10),
+                        "fields": "items(title,link,snippet,pagemap)",
+                        "lr": "lang_en",
+                    }
+                else:
+                    params = {
+                        "key": self.api_key,
+                        "cx": self.search_engine_id,
+                        "q": claim_text,
+                        "num": min(num_results, 10),
+                        "fields": "items(title,link,snippet,pagemap)",
+                        "lr": "lang_en",
+                    }
             elif language == "french":
                 params = {
                     "key": self.api_key,
@@ -174,7 +187,7 @@ class GoogleWebSearchService(WebSearchServiceInterface):
 
         return ""
     
-    def format_sources_for_prompt(self, sources: List[SourceModel], language: str = "english", option: List[int]=[]) -> str:
+    def format_sources_for_prompt(self, sources: List[SourceModel], language: str = "english", option: List[int]=[], date_restrict: Optional[str] = None) -> str:
         """Format sources into a string for the LLM prompt."""
         if language == "english":
             if not sources:
@@ -183,7 +196,7 @@ class GoogleWebSearchService(WebSearchServiceInterface):
             formatted_sources = []
             
             for i, source in enumerate(sources, 1):
-                if 1 in option:
+                if option == [1]:
                     source_info = [
                         f"Source {i}:",
                         f"Title: {source.title}",
@@ -194,6 +207,35 @@ class GoogleWebSearchService(WebSearchServiceInterface):
                         f"Date Created: {source.content}" 
                         if source.content is not None
                         else "Date Created: unknown",
+                        f"Excerpt: {source.snippet}",
+                    ]
+                elif option == [2]:
+                     source_info = [
+                        f"Source {i}:",
+                        f"Title: {source.title}",
+                        f"URL: {source.url}",
+                        f"Credibility Score: {source.credibility_score:.2f}"
+                        if source.credibility_score is not None
+                        else "Credibility Score: N/A",
+                        f"Search Date Range: {date_restrict}" 
+                        if date_restrict is not None
+                        else "Search Date Range: unknown",
+                        f"Excerpt: {source.snippet}",
+                    ]
+                elif 1 in option and 2 in option:
+                    source_info = [
+                        f"Source {i}:",
+                        f"Title: {source.title}",
+                        f"URL: {source.url}",
+                        f"Credibility Score: {source.credibility_score:.2f}"
+                        if source.credibility_score is not None
+                        else "Credibility Score: N/A",
+                        f"Date Created: {source.content}" 
+                        if source.content is not None
+                        else "Date Created: unknown",
+                        f"Search Date Range: {date_restrict}" 
+                        if date_restrict is not None
+                        else "Search Date Range: unknown",
                         f"Excerpt: {source.snippet}",
                     ]
                 else:

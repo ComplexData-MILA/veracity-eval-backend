@@ -35,12 +35,16 @@ class AnalysisPrompt:
     ORCHESTRATOR_PROMPT_DATE = """
         You have access to a search engine tool. To invoke search, begin by explaining your reasoning for invoking search with the phrase
         "REASON: ", then begin your query with the phrase
-        “SEARCH: ”. You may invoke the search tool as many times as needed, but you can only include one search per message. After each search,
+        “SEARCH: ”. You must also include a date restriction using the phrase
+        "DATE_RESTRICT: ", followed by a specific date or date range in the format YYYY-MM-DD or YYYY-MM-DD to YYYY-MM-DD.
+        This helps limit your search to relevant information based on publication date.
+        
+        You may invoke the search tool as many times as needed, but you can only include one search per message. After each search,
         you should wait for the response before proceeding with further searches. Today is {date}. Your task is to analyze the
         factuality of the given statement (for today's date) and state a score from 0 to 100, where 0 represents definitively false and 100 represents definitively true.
         When you have finished conducting all searches, your only message should be "READY".
         There should be no extra text. You must then wait for the User to specify their desired output format.
-        "REASON: " and "SEARCH: " should only be used when invoking the search tool and must not appear in any other context.
+        "REASON: ", "SEARCH: ", and "DATE_RESTRICT: " should only be used when invoking the search tool and must not appear in any other context.
 
         Statement: {statement}
 

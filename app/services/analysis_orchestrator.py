@@ -37,6 +37,7 @@ class _KeywordExtractionOutput(NamedTuple):
 
     content_up_to_match: str
     matched_content: str
+    date_restrict: Optional[str] = None
 
 
 class AnalysisState:
@@ -88,11 +89,14 @@ class AnalysisOrchestrator:
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC),
             )
+
+            option=[2]
+
             current_analysis = await self._analysis_repo.create(initial_analysis)
 
             yield {"type": "status", "content": "Searching for relevant sources..."}
 
-            query = self._query_initial(claim_text, language)
+            query = self._query_initial(claim_text, language, option=option)
             messages = [LLMMessage(role="user", content=query)]
             all_sources = []
             for turns in range(MAX_NUM_TURNS):
@@ -100,6 +104,8 @@ class AnalysisOrchestrator:
                 response = await self._llm.generate_response(messages)
 
                 main_agent_message = response.text
+
+                logger.info(main_agent_message)
 
                 assert main_agent_message is not None, (
                     "Invalid Main Agent API response:",
@@ -109,24 +115,34 @@ class AnalysisOrchestrator:
                 # If search is requested in a message, truncate that message
                 # up to the search request. (Discard anything after the query.)
 
-                search_request_match = self._extract_search_query_or_none(main_agent_message, language)
+                search_request_match = self._extract_search_query_or_none(main_agent_message, language, option=option)
+                if search_request_match is not None:
+                    prompt = search_request_match.matched_content
+                    summary = search_request_match.content_up_to_match
+                    date_restrict = None
+                    if 2 in option:
+                        date_restrict = search_request_match.date_restrict
+                        logging.info(date_restrict)
+
                 if search_request_match is not None:
                     initial_search = Search(
                         id=uuid4(),
                         analysis_id=current_analysis.id,
-                        prompt=search_request_match.matched_content,
-                        summary=search_request_match.content_up_to_match,
+                        prompt=prompt,
+                        summary=summary,
                         created_at=datetime.now(UTC),
                         updated_at=datetime.now(UTC),
                     )
                     current_search = await self._search_repo.create(initial_search)
                     sources = await self._web_search.search_and_create_sources(
-                        claim_text=search_request_match.matched_content, search_id=current_search.id, language=language, option=[1]
+                        claim_text=search_request_match.matched_content, search_id=current_search.id, language=language, option=option, date_restrict=date_restrict
                     )
 
                     all_sources += sources
 
-                    search_response = self._web_search.format_sources_for_prompt(sources, language, option=[1])
+                    search_response = self._web_search.format_sources_for_prompt(sources, language, option=option, date_restrict=date_restrict)
+
+                    logging.info(search_response)
 
                     if language == "english":
                         messages += [
@@ -167,7 +183,7 @@ class AnalysisOrchestrator:
                     "content": f"Found {len(sources)} relevant sources (overall credibility: {source_credibility:.2f})",
                 }
 
-            sources_text = self._web_search.format_sources_for_prompt(all_sources, language)
+            sources_text = self._web_search.format_sources_for_prompt(all_sources, language, option=option, date_restrict=date_restrict)
             logger.debug(f"Sources for all searches to be analyzed {sources_text}")
             yield {"type": "status", "content": "Analyzing claim with gathered sources..."}
 
@@ -671,7 +687,7 @@ class AnalysisOrchestrator:
 
         if language == "english":
             if 2 in option: 
-                return AnalysisPrompt.ORCHESTRATOR_PROMPT.format(statement=statement, date=datetime.now().isoformat())
+                return AnalysisPrompt.ORCHESTRATOR_PROMPT_DATE.format(statement=statement, date=datetime.now().isoformat())
             else:  
                 return AnalysisPrompt.ORCHESTRATOR_PROMPT.format(statement=statement, date=datetime.now().isoformat())
         elif language == "french":
@@ -683,6 +699,7 @@ class AnalysisOrchestrator:
         self,
         assistant_response: str,
         language: str,
+        option: List[int] = []
     ) -> Optional[_KeywordExtractionOutput]:
         """
         Try to extract "SEARCH: query\\n" request from the main agent response.
@@ -694,7 +711,14 @@ class AnalysisOrchestrator:
             None otherwise.
         """
         if language == "english":
-            match = re.search(r"^\s*REASON:\s*(.*?)\s*SEARCH:\s+(.+)$", assistant_response, re.DOTALL | re.MULTILINE)
+            if 2 in option:
+                match = re.search(
+                    r"^\s*REASON:\s*(.*?)\s*SEARCH:\s*(.*?)\s*DATE_RESTRICT:\s*(.+)$",
+                    assistant_response,
+                    re.DOTALL | re.MULTILINE
+                )
+            else:
+                match = re.search(r"^\s*REASON:\s*(.*?)\s*SEARCH:\s+(.+)$", assistant_response, re.DOTALL | re.MULTILINE)
         elif language == "french":
             # TODO replace once French Prompt is settled
             match = re.search(
@@ -705,6 +729,12 @@ class AnalysisOrchestrator:
 
         if match is None:
             return None
+        if 2 in option:
+            return _KeywordExtractionOutput(
+            content_up_to_match=match.group(1).strip(),
+            matched_content=match.group(2).strip(),
+            date_restrict = match.group(3).strip()
+            )
         return _KeywordExtractionOutput(
             content_up_to_match=match.group(1),
             matched_content=match.group(2),
