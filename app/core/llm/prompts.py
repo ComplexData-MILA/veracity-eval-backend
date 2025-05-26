@@ -48,6 +48,23 @@ class AnalysisPrompt:
 
     """
 
+    GET_VERACITY_EX = """
+
+    "After providing all your analysis steps, summarize your analysis WITH NO REFERENCE TO THE SCORE
+    and state a score from 0 to 100,
+    where 0 represents definitively false and 100 represents definitively true, in the following JSON format:\n"
+        "{\n"
+        '    "veracity_score": <integer between 0 and 100>,\n'
+        '    "analysis": "<detailed analysis text>"\n'
+        "}\n\n"
+        "Important formatting rules:\n"
+        "1. Provide ONLY the JSON object, no additional text\n"
+        "2. Ensure all special characters in the analysis text are properly escaped\n"
+        "3. The analysis field should be a single line with newlines represented as \\n\n"
+        "4. Do not include any control characters\n"
+
+    """
+
     GET_VERACITY_FR = """
 
     "Après avoir fourni toutes vos étapes d'analyse, résumez votre analyse et indiquez un score de 0 à 100,
