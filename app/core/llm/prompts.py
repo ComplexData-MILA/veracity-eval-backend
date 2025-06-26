@@ -64,6 +64,20 @@ class AnalysisPrompt:
 
     """
 
+    HIGH_ASSERT = """
+
+    "Make the new explanation as assertive as possible, maintaining approximately {original_length} words 
+    and including all the supporting evidence and detail. Speak as if you are a confident CEO addressing your company. 
+    Use definitive language and make strong, clear points."
+
+    """
+
+    LOW_ASSERT = """
+    "Make the new explanation as least assertive as possible, maintaining approximately {original_length} words 
+    and including all the supporting evidence and detail. Speak as if you are discussing a topic you are not familiar with. 
+    Use uncertain language and suggest possibilities rather than facts."
+    """
+
     IDEAL_PROMPT = """
         After providing all your analysis steps, summarize your analysis and and state “Factuality: ” and a score from 0 to 1,
         where 0 represents definitively false and 100 represents definitively true. You should begin your summary with the phrase ”Summary:
