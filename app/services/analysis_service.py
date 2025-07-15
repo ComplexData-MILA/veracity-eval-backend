@@ -2,6 +2,7 @@ from datetime import datetime, UTC
 from typing import List, Optional, Tuple
 from uuid import UUID, uuid4
 import logging
+from copy import deepcopy
 
 from app.models.database.models import AnalysisStatus
 from app.models.domain.analysis import Analysis
