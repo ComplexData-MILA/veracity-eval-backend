@@ -77,9 +77,10 @@ async def stream_claim_analysis(
     except Exception as e:
         logger.error(f"Stream error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
 @router.get("experiment/claim/{claim_id}/stream", response_class=StreamingResponse)
-async def stream_claim_analysis(
+async def stream_claim_analysis_exp(
     request: Request,
     claim_id: UUID,
     auth_middleware: Auth0Middleware = Depends(get_auth_middleware),
