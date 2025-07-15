@@ -78,7 +78,7 @@ async def stream_claim_analysis(
         logger.error(f"Stream error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
     
-@router.get("/claim/{claim_id}/stream/experiment", response_class=StreamingResponse)
+@router.get("experiment/claim/{claim_id}/stream", response_class=StreamingResponse)
 async def stream_claim_analysis(
     request: Request,
     claim_id: UUID,
@@ -95,7 +95,7 @@ async def stream_claim_analysis(
                 yield f"data: {json.dumps({'type': 'status', 'content': 'Initializing analysis...'})}\n\n"
 
                 async for event in analysis_orchestrator.analyze_claim_stream(
-                    claim_id=claim_id, user_id=current_user.id, experiment=True
+                    claim_id=claim_id, user_id=current_user.id, default=False
                 ):
                     if isinstance(event, dict):
                         yield f"data: {json.dumps(event)}\n\n"
