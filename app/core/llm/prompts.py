@@ -62,10 +62,11 @@ class AnalysisPrompt:
         "2. Ensure all special characters in the analysis text are properly escaped\n"
         "3. The analysis field should be a single line with newlines represented as \\n\n"
         "4. Do not include any control characters\n"
-        
-    REMOVE_SOURCES = """
-    
 
+    """
+
+    REMOVE_SOURCES = """
+    TBD
     """
 
     GET_VERACITY_FR = """
@@ -85,9 +86,9 @@ class AnalysisPrompt:
     """
 
     GET_CONFIDENCE = """
-    You will be provided with an original user statement, and your own previous response to that statement 
-    (which included an explanation and a veracity score). 
-    Your task now is to carefully review your 
+    You will be provided with an original user statement, and your own previous response to that statement
+    (which included an explanation and a veracity score).
+    Your task now is to carefully review your
     previous response and provide a new score reflecting your epistemic self-certainty about it.
     Original User Statement: “{statement}”
     Your Previous Response to this Statement:
@@ -95,10 +96,10 @@ class AnalysisPrompt:
     Veracity Score (0-100, where 0=Definitively False, 50=Uncertain, 100=Definitively True): {veracity}
     Now, carefully consider YOUR PREVIOUS RESPONSE package above.
     Critically evaluate your previous explanation and veracity score for the original user statement.
-    First, briefly outline the main strengths of your previous response (e.g., clear reasoning, strong supporting points 
-    based on the information processed). Limit to 1-2 sentences. Second, briefly identify any potential limitations, 
+    First, briefly outline the main strengths of your previous response (e.g., clear reasoning, strong supporting points
+    based on the information processed). Limit to 1-2 sentences. Second, briefly identify any potential limitations,
     ambiguities in your reasoning, or aspects where your previous analysis might have been incomplete or less certain. Limit to 1-2 sentences.
-    Finally, based on this self-critique, provide an overall confidence score (0-100) reflecting your certainty in the correctness 
+    Finally, based on this self-critique, provide an overall confidence score (0-100) reflecting your certainty in the correctness
     and reliability of your *entire previous response package* (explanation and initial veracity score).
     Use 0 = Minimal confidence/certainty in previous response package; 100 = Maximal confidence/certainty in previous response package.
     Follow this output format strictly:
@@ -109,15 +110,15 @@ class AnalysisPrompt:
 
     HIGH_ASSERT = """
 
-    "Make the new explanation as assertive as possible, maintaining approximately {original_length} words 
-    and including all the supporting evidence and detail. Speak as if you are a confident CEO addressing your company. 
+    "Make the new explanation as assertive as possible, maintaining approximately {original_length} words
+    and including all the supporting evidence and detail. Speak as if you are a confident CEO addressing your company.
     Use definitive language and make strong, clear points."
 
     """
 
     LOW_ASSERT = """
-    "Make the new explanation as least assertive as possible, maintaining approximately {original_length} words 
-    and including all the supporting evidence and detail. Speak as if you are discussing a topic you are not familiar with. 
+    "Make the new explanation as least assertive as possible, maintaining approximately {original_length} words
+    and including all the supporting evidence and detail. Speak as if you are discussing a topic you are not familiar with.
     Use uncertain language and suggest possibilities rather than facts."
     """
 
