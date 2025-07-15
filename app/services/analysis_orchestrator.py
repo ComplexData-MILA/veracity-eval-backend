@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 from datetime import UTC, datetime
 import json
 import re
+from copy import deepcopy
 
 from app.core.exceptions import NotAuthorizedException, NotFoundException, ValidationError
 from app.core.llm.interfaces import LLMProvider
@@ -74,7 +75,7 @@ class AnalysisOrchestrator:
         self._analysis_state = AnalysisState()
 
     async def _generate_analysis(
-        self, claim_text: str, context: str, language: str
+        self, claim_text: str, context: str, language: str, default: bool = True
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Generate analysis for a claim with web search and source management."""
         try:
@@ -179,7 +180,7 @@ class AnalysisOrchestrator:
                 messages += [LLMMessage(role="user", content=AnalysisPrompt.GET_VERACITY_FR)]
 
             analysis_text = []
-            logger.debug(messages)
+            logger.info(messages)
             async for chunk in self._llm.generate_stream(messages):
                 if not chunk.is_complete:
                     analysis_text.append(chunk.text)
@@ -222,6 +223,11 @@ class AnalysisOrchestrator:
                         current_analysis.analysis_text = analysis_content
                         current_analysis.status = AnalysisStatus.completed.value
                         current_analysis.updated_at = datetime.now(UTC)
+
+                        if(not default):
+                            con_score = await self._generate_confidence_score(statement=claim_text, analysis=analysis_content, veracity=veracity_score)
+                            logger.info(con_score)
+                            current_analysis.confidence_score = float(con_score) / 100.0
 
                         updated_analysis = await self._analysis_repo.update(current_analysis)
 
@@ -472,7 +478,7 @@ class AnalysisOrchestrator:
         )
         return await self._message_repo.create(message)
 
-    async def analyze_claim_stream(self, claim_id: UUID, user_id: UUID) -> AsyncGenerator[Dict[str, Any], None]:
+    async def analyze_claim_stream(self, claim_id: UUID, user_id: UUID, default: bool = True) -> AsyncGenerator[Dict[str, Any], None]:
         """Stream the analysis process for a claim and initialize conversation."""
         try:
             logger.info(f"Starting analysis for claim {claim_id}")
@@ -489,7 +495,7 @@ class AnalysisOrchestrator:
 
             # Generate analysis
             analysis_complete = False
-            async for chunk in self._generate_analysis(claim.claim_text, claim.context, claim.language):
+            async for chunk in self._generate_analysis(claim.claim_text, claim.context, claim.language, default):
                 if chunk["type"] == "analysis_complete":
                     analysis_complete = True
                     # Get the full analysis to create conversation
@@ -677,6 +683,19 @@ class AnalysisOrchestrator:
             return AnalysisPrompt.ORCHESTRATOR_PROMPT_FR.format(statement=statement, date=datetime.now().isoformat())
         else:
             raise ValidationError("Claim Language is invalid")
+    
+    async def _generate_confidence_score(self, statement: str,  analysis: str, veracity: str):
+        messages= [LLMMessage(role="user", content=AnalysisPrompt.GET_CONFIDENCE.format(statement=statement, analysis=analysis, veracity=veracity))]
+        response = await self._llm.generate_response(messages)
+        text = response.text
+        logger.info(text)
+
+        match = re.search(r"(\d+)(?!.*\d)", text)
+        
+        if match:
+            return (match.group(1))  # Output: 56
+
+        return ""
 
     def _extract_search_query_or_none(
         self,
@@ -744,3 +763,53 @@ class AnalysisOrchestrator:
             return None
 
         return match.group(1)
+    
+    async def vary_analysis_assertiveness(
+            self, analysis_id: UUID
+        ) -> Analysis:
+            """Get analysis by ID, and return different assertivity"""
+            analysis = await self._analysis_repo.get(analysis_id)
+
+            if not analysis:
+                raise NotFoundException("Analysis not found")
+            
+            claim = await self._claim_repo.get(analysis.claim_id)
+            if not claim:
+                raise NotFoundException("Claim not found")
+            
+            assertiveness = claim.batch_post_id
+
+            analysis_copy = deepcopy(analysis)
+
+            if assertiveness == "med":
+                pass
+            elif assertiveness == "low" or assertiveness == "high":
+                analysis_copy.analysis_text = await self.llm_message_assertivity(analysis_copy.analysis_text, assertiveness)
+                return analysis 
+            else:
+                raise NotFoundException("Assertivity was NOT properly set before the Get request was made.")
+            
+            return analysis_copy
+    
+    async def llm_message_assertivity(self, text, assertiveness):
+
+        messages += [
+            LLMMessage(role="user", content=f"The analysis text is {text}"),
+            LLMMessage(role="user", 
+                       content = (
+                        AnalysisPrompt.HIGH_ASSERT.format(original_length=str(len(text.split())))
+                        if assertiveness == "high"
+                        else AnalysisPrompt.LOW_ASSERT.format(original_length=str(len(text.split())))
+                    )),
+        ] 
+
+        response = await self._llm.generate_response(messages)
+
+        main_agent_message = response.text
+
+        assert main_agent_message is not None, (
+            "Invalid Main Agent API response:",
+            response,
+        )
+
+        return main_agent_message
