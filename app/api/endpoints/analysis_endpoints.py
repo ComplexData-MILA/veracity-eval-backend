@@ -78,50 +78,8 @@ async def stream_claim_analysis(
         logger.error(f"Stream error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/experiment/claim/{claim_id}/stream", response_class=StreamingResponse)
-async def stream_claim_analysis(
-    request: Request,
-    claim_id: UUID,
-    auth_middleware: Auth0Middleware = Depends(get_auth_middleware),
-    analysis_orchestrator: AnalysisOrchestrator = Depends(get_orchestrator_service),
-) -> StreamingResponse:
-    """Stream the analysis process for a claim in real-time."""
-    try:
-        current_user = await auth_middleware.authenticate_request(request)
-
-        async def event_generator():
-            try:
-                logger.info(f"Starting analysis stream for claim {claim_id}")
-                yield f"data: {json.dumps({'type': 'status', 'content': 'Initializing analysis...'})}\n\n"
-
-                async for event in analysis_orchestrator.analyze_claim_stream(
-                    claim_id=claim_id, user_id=current_user.id, default=False
-                ):
-                    if isinstance(event, dict):
-                        yield f"data: {json.dumps(event)}\n\n"
-
-            except Exception as e:
-                logger.error(f"Error in analysis stream: {str(e)}", exc_info=True)
-                yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
-            finally:
-                yield "data: [DONE]\n\n"
-
-        return StreamingResponse(
-            event_generator(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Credentials": "true",
-            },
-        )
-    except Exception as e:
-        logger.error(f"Stream error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("experiment/claim/{claim_id}/stream", response_class=StreamingResponse)
 async def stream_claim_analysis_exp(
     request: Request,
     claim_id: UUID,

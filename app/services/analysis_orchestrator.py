@@ -225,8 +225,10 @@ class AnalysisOrchestrator:
                         current_analysis.status = AnalysisStatus.completed.value
                         current_analysis.updated_at = datetime.now(UTC)
 
-                        if(not default):
-                            con_score = await self._generate_confidence_score(statement=claim_text, analysis=analysis_content, veracity=veracity_score)
+                        if not default:
+                            con_score = await self._generate_confidence_score(
+                                statement=claim_text, analysis=analysis_content, veracity=veracity_score
+                            )
                             logger.info(con_score)
                             current_analysis.confidence_score = float(con_score) / 100.0
 
@@ -479,7 +481,6 @@ class AnalysisOrchestrator:
         )
         return await self._message_repo.create(message)
 
-
     async def analyze_claim_stream(
         self, claim_id: UUID, user_id: UUID, default: bool = True
     ) -> AsyncGenerator[Dict[str, Any], None]:
@@ -690,17 +691,22 @@ class AnalysisOrchestrator:
             return AnalysisPrompt.ORCHESTRATOR_PROMPT_FR.format(statement=statement, date=datetime.now().isoformat())
         else:
             raise ValidationError("Claim Language is invalid")
-    
-    async def _generate_confidence_score(self, statement: str,  analysis: str, veracity: str):
-        messages= [LLMMessage(role="user", content=AnalysisPrompt.GET_CONFIDENCE.format(statement=statement, analysis=analysis, veracity=veracity))]
+
+    async def _generate_confidence_score(self, statement: str, analysis: str, veracity: str):
+        messages = [
+            LLMMessage(
+                role="user",
+                content=AnalysisPrompt.GET_CONFIDENCE.format(statement=statement, analysis=analysis, veracity=veracity),
+            )
+        ]
         response = await self._llm.generate_response(messages)
         text = response.text
         logger.info(text)
 
         match = re.search(r"(\d+)(?!.*\d)", text)
-        
+
         if match:
-            return (match.group(1))  # Output: 56
+            return match.group(1)  # Output: 56
 
         return ""
 
@@ -770,45 +776,45 @@ class AnalysisOrchestrator:
             return None
 
         return match.group(1)
-    
-    async def vary_analysis_assertiveness(
-            self, analysis_id: UUID
-        ) -> Analysis:
-            """Get analysis by ID, and return different assertivity"""
-            analysis = await self._analysis_repo.get(analysis_id)
 
-            if not analysis:
-                raise NotFoundException("Analysis not found")
-            
-            claim = await self._claim_repo.get(analysis.claim_id)
-            if not claim:
-                raise NotFoundException("Claim not found")
-            
-            assertiveness = claim.batch_post_id
+    async def vary_analysis_assertiveness(self, analysis_id: UUID) -> Analysis:
+        """Get analysis by ID, and return different assertivity"""
+        analysis = await self._analysis_repo.get(analysis_id)
 
-            analysis_copy = deepcopy(analysis)
+        if not analysis:
+            raise NotFoundException("Analysis not found")
 
-            if assertiveness == "med":
-                pass
-            elif assertiveness == "low" or assertiveness == "high":
-                analysis_copy.analysis_text = await self.llm_message_assertivity(analysis_copy.analysis_text, assertiveness)
-                return analysis 
-            else:
-                raise NotFoundException("Assertivity was NOT properly set before the Get request was made.")
-            
-            return analysis_copy
-    
+        claim = await self._claim_repo.get(analysis.claim_id)
+        if not claim:
+            raise NotFoundException("Claim not found")
+
+        assertiveness = claim.batch_post_id
+
+        analysis_copy = deepcopy(analysis)
+
+        if assertiveness == "med":
+            pass
+        elif assertiveness == "low" or assertiveness == "high":
+            analysis_copy.analysis_text = await self.llm_message_assertivity(analysis_copy.analysis_text, assertiveness)
+            return analysis
+        else:
+            raise NotFoundException("Assertivity was NOT properly set before the Get request was made.")
+
+        return analysis_copy
+
     async def llm_message_assertivity(self, text, assertiveness):
 
-        messages += [
+        messages = [
             LLMMessage(role="user", content=f"The analysis text is {text}"),
-            LLMMessage(role="user", 
-                       content = (
-                        AnalysisPrompt.HIGH_ASSERT.format(original_length=str(len(text.split())))
-                        if assertiveness == "high"
-                        else AnalysisPrompt.LOW_ASSERT.format(original_length=str(len(text.split())))
-                    )),
-        ] 
+            LLMMessage(
+                role="user",
+                content=(
+                    AnalysisPrompt.HIGH_ASSERT.format(original_length=str(len(text.split())))
+                    if assertiveness == "high"
+                    else AnalysisPrompt.LOW_ASSERT.format(original_length=str(len(text.split())))
+                ),
+            ),
+        ]
 
         response = await self._llm.generate_response(messages)
 
