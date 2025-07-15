@@ -74,7 +74,7 @@ class AnalysisOrchestrator:
         self._analysis_state = AnalysisState()
 
     async def _generate_analysis(
-        self, claim_text: str, context: str, language: str
+        self, claim_text: str, context: str, language: str, default: bool = True
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Generate analysis for a claim with web search and source management."""
         try:
@@ -174,7 +174,8 @@ class AnalysisOrchestrator:
             yield {"type": "status", "content": "Analyzing claim with gathered sources..."}
 
             if language == "english":
-                messages += [LLMMessage(role="user", content=AnalysisPrompt.GET_VERACITY)]
+                prompt = AnalysisPrompt.GET_VERACITY_EX if not default else AnalysisPrompt.GET_VERACITY
+                messages += [LLMMessage(role="user", content=prompt)]
             elif language == "french":
                 messages += [LLMMessage(role="user", content=AnalysisPrompt.GET_VERACITY_FR)]
 
@@ -472,7 +473,9 @@ class AnalysisOrchestrator:
         )
         return await self._message_repo.create(message)
 
-    async def analyze_claim_stream(self, claim_id: UUID, user_id: UUID) -> AsyncGenerator[Dict[str, Any], None]:
+    async def analyze_claim_stream(
+        self, claim_id: UUID, user_id: UUID, default: bool = True
+    ) -> AsyncGenerator[Dict[str, Any], None]:
         """Stream the analysis process for a claim and initialize conversation."""
         try:
             logger.info(f"Starting analysis for claim {claim_id}")
@@ -489,7 +492,9 @@ class AnalysisOrchestrator:
 
             # Generate analysis
             analysis_complete = False
-            async for chunk in self._generate_analysis(claim.claim_text, claim.context, claim.language):
+            async for chunk in self._generate_analysis(
+                claim.claim_text, claim.context, claim.language, default=default
+            ):
                 if chunk["type"] == "analysis_complete":
                     analysis_complete = True
                     # Get the full analysis to create conversation
