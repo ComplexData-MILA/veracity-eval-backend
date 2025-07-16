@@ -164,3 +164,18 @@ async def get_claim(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get analysis list: {str(e)}"
         )
+
+
+@router.get("/{analysis_id}/assertiveness", response_model=AnalysisRead, summary="Modify the assertiveness level")
+async def vary_assert(
+    analysis_id: UUID,
+    analysis_orchestrator: AnalysisOrchestrator = Depends(get_orchestrator_service),
+) -> AnalysisRead:
+    """Get average reliability score for claims by language."""
+    try:
+        analysis = await analysis_orchestrator.vary_analysis_assertiveness(analysis_id=analysis_id)
+        return AnalysisRead.model_validate(analysis)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get alter assertivity : {str(e)}"
+        )
