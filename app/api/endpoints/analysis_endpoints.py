@@ -165,8 +165,9 @@ async def get_claim(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get analysis list: {str(e)}"
         )
 
+
 @router.get("/{analysis_id}/assertiveness", response_model=AnalysisRead, summary="Modify the assertiveness level")
-async def get_claim(
+async def vary_assert(
     analysis_id: UUID,
     analysis_orchestrator: AnalysisOrchestrator = Depends(get_orchestrator_service),
 ) -> AnalysisRead:
