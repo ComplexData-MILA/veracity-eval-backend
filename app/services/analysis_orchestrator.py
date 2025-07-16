@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import json
 import re
 from copy import deepcopy
+import asyncio
 
 from app.core.exceptions import NotAuthorizedException, NotFoundException, ValidationError
 from app.core.llm.interfaces import LLMProvider
@@ -795,14 +796,16 @@ class AnalysisOrchestrator:
         if assertiveness == "med":
             pass
         elif assertiveness == "low" or assertiveness == "high":
-            analysis_copy.analysis_text = await self.llm_message_assertivity(analysis_copy.analysis_text, assertiveness)
-            return analysis
+            analysis_copy.analysis_text = await self._llm_message_assertivity(analysis_copy.analysis_text, assertiveness)
+            claim.context = analysis_copy.analysis_text
+            await self._claim_repo.update(claim)
+            return analysis_copy
         else:
             raise NotFoundException("Assertivity was NOT properly set before the Get request was made.")
 
         return analysis_copy
 
-    async def llm_message_assertivity(self, text, assertiveness):
+    async def _llm_message_assertivity(self, text, assertiveness):
 
         messages = [
             LLMMessage(role="user", content=f"The analysis text is {text}"),
