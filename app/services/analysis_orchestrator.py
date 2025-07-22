@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.DEBUG)
 
-warning_handler = logging.FileHandler('exta_info.log')
+warning_handler = logging.FileHandler("exta_info.log")
 warning_handler.setLevel(logging.WARNING)
-formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(name)s | %(message)s')
+formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 warning_handler.setFormatter(formatter)
 
 logger.addHandler(console_handler)
@@ -193,7 +193,7 @@ class AnalysisOrchestrator:
                 messages += [LLMMessage(role="user", content=AnalysisPrompt.GET_VERACITY_FR)]
 
             analysis_text = []
-            
+
             async for chunk in self._llm.generate_stream(messages):
                 if not chunk.is_complete:
                     analysis_text.append(chunk.text)
