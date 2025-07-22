@@ -29,6 +29,18 @@ from app.core.llm.prompts import AnalysisPrompt
 
 logger = logging.getLogger(__name__)
 
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.DEBUG)
+
+warning_handler = logging.FileHandler("exta_info.log")
+warning_handler.setLevel(logging.WARNING)
+formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+warning_handler.setFormatter(formatter)
+
+logger.addHandler(console_handler)
+logger.addHandler(warning_handler)
+logger.propagate = False
+
 MAX_NUM_TURNS: int = 10
 MAX_SEARCH_RESULTS: int = 10
 
@@ -181,7 +193,7 @@ class AnalysisOrchestrator:
                 messages += [LLMMessage(role="user", content=AnalysisPrompt.GET_VERACITY_FR)]
 
             analysis_text = []
-            logger.info(messages)
+
             async for chunk in self._llm.generate_stream(messages):
                 if not chunk.is_complete:
                     analysis_text.append(chunk.text)
@@ -229,7 +241,7 @@ class AnalysisOrchestrator:
                             con_score = await self._generate_confidence_score(
                                 statement=claim_text, analysis=analysis_content, veracity=veracity_score
                             )
-                            logger.info(con_score)
+                            logger.warning(con_score)
                             current_analysis.confidence_score = float(con_score) / 100.0
 
                         updated_analysis = await self._analysis_repo.update(current_analysis)
@@ -701,12 +713,12 @@ class AnalysisOrchestrator:
         ]
         response = await self._llm.generate_response(messages)
         text = response.text
-        logger.info(text)
+        logger.warning(text)
 
-        match = re.search(r"(\d+)(?!.*\d)", text)
+        match = re.findall(r"\d+", text)
 
         if match:
-            return match.group(1)  # Output: 56
+            return match[-1]
 
         return ""
 
