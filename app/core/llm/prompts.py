@@ -50,8 +50,8 @@ class AnalysisPrompt:
 
     GET_VERACITY_EX = """
 
-    "After providing all your analysis steps, summarize your analysis WITH NO REFERENCE TO THE SCORE
-    and state a score from 0 to 100,
+    "After providing all your analysis steps, summarize your analysis WITH NO REFERENCE TO THE SCORE and
+    NO REFERENCE TO HOW CREDIBLE THE SOURCES are and state a score from 0 to 100,
     where 0 represents definitively false and 100 represents definitively true, in the following JSON format:\n"
         "{\n"
         '    "veracity_score": <integer between 0 and 100>,\n'
