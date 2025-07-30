@@ -86,21 +86,19 @@ class AnalysisPrompt:
     """
 
     GET_CONFIDENCE = """
-    You will be provided with an original user statement, and your own previous response to that statement
-    (which included an explanation and a veracity score).
+    You will be provided with an original user statement, and your own previous response to that statement.
     Your task now is to carefully review your
     previous response and provide a new score reflecting your epistemic self-certainty about it.
     Original User Statement: “{statement}”
     Your Previous Response to this Statement:
     Explanation: “{analysis}”
-    Veracity Score (0-100, where 0=Definitively False, 50=Uncertain, 100=Definitively True): {veracity}
     Now, carefully consider YOUR PREVIOUS RESPONSE package above.
-    Critically evaluate your previous explanation and veracity score for the original user statement.
+    Critically evaluate your previous explanation for the original user statement.
     First, briefly outline the main strengths of your previous response (e.g., clear reasoning, strong supporting points
     based on the information processed). Limit to 1-2 sentences. Second, briefly identify any potential limitations,
     ambiguities in your reasoning, or aspects where your previous analysis might have been incomplete or less certain. Limit to 1-2 sentences.
     Finally, based on this self-critique, provide an overall confidence score (0-100) reflecting your certainty in the correctness
-    and reliability of your *entire previous response package* (explanation and initial veracity score).
+    and reliability of your entire previous response.
     Use 0 = Minimal confidence/certainty in previous response package; 100 = Maximal confidence/certainty in previous response package.
     Follow this output format strictly:
     Strengths of Previous Response: [LLM fills this]
