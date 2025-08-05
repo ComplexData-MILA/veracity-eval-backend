@@ -111,7 +111,7 @@ class AnalysisPrompt:
     HIGH_ASSERT = """
 
     "Make the new explanation as assertive as possible, maintaining approximately {original_length} words
-    and including all the supporting evidence and detail. Speak as if you are a confident CEO addressing your company.
+    and including all the supporting evidence and detail. Speak as if you are discussing a topic you are extremely confident in.
     Use definitive language and make strong, clear points."
 
     """
