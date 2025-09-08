@@ -1,6 +1,6 @@
 import os
 from typing import Optional
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings # type: ignore
 from functools import lru_cache
 import logging
 
@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     )
     GOOGLE_SEARCH_API_KEY: str = ""
     GOOGLE_SEARCH_ENGINE_ID: str = ""
+
+    SERPER_API_KEY: str = ""
 
     LLAMA_MODEL_NAME: str = "meta/llama-3.3-70b-instruct-maas"
 
@@ -73,6 +75,7 @@ class Settings(BaseSettings):
         print(f"GOOGLE_CLOUD_PROJECT: {self.GOOGLE_CLOUD_PROJECT}")
         print(f"GOOGLE_SEARCH_ENGINE_ID: {self.GOOGLE_SEARCH_ENGINE_ID}")
         print(f"Google Search API configured: {bool(self.GOOGLE_SEARCH_API_KEY)}")
+        print(f"Serper Search API configured: {bool(self.SERPER_API_KEY)}")
         print(f"LLAMA_MODEL_NAME: {self.LLAMA_MODEL_NAME}")
         print("=====================================\n")
 
