@@ -9,7 +9,7 @@ import logging
 from datetime import UTC, datetime
 
 from app.core.config import get_settings
-from app.api.dependencies import get_db
+# from app.api.dependencies import get_db
 from app.repositories.implementations.user_repository import UserRepository
 from app.services.user_service import UserService
 from app.models.domain.user import User
@@ -148,24 +148,24 @@ class Auth0Middleware:
                 user_repo = UserRepository(session)
                 user_service = UserService(user_repo)
                 # Try to get user by Auth0 ID
-                user = await self.user_service.get_by_auth0_id(user_data["sub"])
+                user = await user_service.get_by_auth0_id(user_data["sub"])
                 if user:
-                    return await self.user_service.record_login(user.id)
+                    return await user_service.record_login(user.id)
 
                 # Try to get user by email
                 email = user_data.get("email")
                 if email:
-                    user = await self.user_service.get_by_email(email)
+                    user = await user_service.get_by_email(email)
                     if user:
                         user.auth0_id = user_data["sub"]
                         user.last_login = datetime.now(UTC)
-                        return await self.user_service.update(user)
+                        return await user_service.update(user)
 
                 # Create new user
                 username = self._generate_username(user_data)
                 email = user_data.get("email") or f"{username}@placeholder.com"
 
-                return await self.user_service.create_user_from_auth0(
+                return await user_service.create_user_from_auth0(
                     auth0_id=user_data["sub"],
                     email=email,
                     username=username,

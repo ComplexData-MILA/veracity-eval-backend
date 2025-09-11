@@ -35,13 +35,23 @@ from app.services.domain_service import DomainService
 from app.services.source_service import SourceService
 from app.services.search_service import SearchService
 from app.services.feedback_service import FeedbackService
+from app.db.session import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async for session in get_session():
-        yield session
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            # commit only if writes happened
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            # rollback again to ensure read txns are closed
+            await session.rollback()
 
 
 async def get_user_repository(session: Session = Depends(get_db)) -> UserRepository:
@@ -198,8 +208,8 @@ async def get_orchestrator_service(
     )
 
 
-def get_auth_middleware(user_service: UserService = Depends(get_user_service)) -> Auth0Middleware:
-    return Auth0Middleware(user_service)
+def get_auth_middleware() -> Auth0Middleware:
+    return Auth0Middleware()
 
 
 async def get_current_user(request: Request, auth_middleware: Auth0Middleware = Depends(get_auth_middleware)) -> User:
