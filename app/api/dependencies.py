@@ -35,23 +35,13 @@ from app.services.domain_service import DomainService
 from app.services.source_service import SourceService
 from app.services.search_service import SearchService
 from app.services.feedback_service import FeedbackService
-from app.db.session import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-            # commit only if writes happened
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            # rollback again to ensure read txns are closed
-            await session.rollback()
+    async for session in get_session():
+        yield session
 
 
 async def get_user_repository(session: Session = Depends(get_db)) -> UserRepository:

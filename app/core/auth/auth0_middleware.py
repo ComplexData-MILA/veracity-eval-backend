@@ -9,6 +9,7 @@ import logging
 from datetime import UTC, datetime
 
 from app.core.config import get_settings
+
 # from app.api.dependencies import get_db
 from app.repositories.implementations.user_repository import UserRepository
 from app.services.user_service import UserService

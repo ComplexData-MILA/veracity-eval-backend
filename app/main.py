@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.api.router import router
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.auth.auth0_middleware import Auth0Middleware
+
 # from app.services.user_service import UserService
 # from app.repositories.implementations.user_repository import UserRepository
 # from app.db.session import AsyncSessionLocal
