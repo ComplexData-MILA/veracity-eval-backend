@@ -191,7 +191,7 @@ resource "google_sql_database_instance" "misinformation_mitigation_db" {
   depends_on = [google_service_networking_connection.private_vpc_connection]
 
   settings {
-    tier = "db-f1-micro"
+    tier = "db-custom-1-3840"
 
     ip_configuration {
       ipv4_enabled    = false
