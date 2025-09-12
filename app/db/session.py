@@ -1,13 +1,16 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from typing import AsyncGenerator
 from app.core.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 engine = create_async_engine(
     settings.get_async_database_url,
     echo=settings.DEBUG,
     future=True,
     pool_pre_ping=True,
-    pool_size=6,
+    pool_size=2,
     max_overflow=2,
     pool_timeout=30,
     pool_recycle=1800,
@@ -22,14 +25,15 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """Get a database session with commit/rollback."""
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+# temporarily swap for debugging
+# async def get_session() -> AsyncGenerator[AsyncSession, None]:
+#     """Get a database session with commit/rollback."""
+#     async with AsyncSessionLocal() as session:
+#         try:
+#             yield session
+#             await session.commit()
+#         except Exception:
+#             await session.rollback()
+#             raise
+#         finally:
+#             await session.close()
