@@ -1,5 +1,5 @@
 import logging
-from fastapi import Depends, Request
+from fastapi import Depends, Request, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import AsyncGenerator
@@ -211,9 +211,41 @@ async def get_orchestrator_service(
     )
 
 
+#TODO Add User repo and User Service dependencies here
 def get_auth_middleware() -> Auth0Middleware:
     return Auth0Middleware()
 
 
-async def get_current_user(request: Request, auth_middleware: Auth0Middleware = Depends(get_auth_middleware)) -> User:
-    return await auth_middleware.authenticate_request(request)
+async def get_current_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    if not request.state.user_claims:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    payload = request.state.user_claims
+    user_repo = UserRepository(db)
+    user_service = UserService(user_repo)
+
+    # Check by Auth0 ID
+    user = await user_service.get_by_auth0_id(payload["sub"])
+    if user:
+        return await user_service.record_login(user.id)
+
+    # Check by email
+    email = payload.get("email")
+    if email:
+        user = await user_service.get_by_email(email)
+        if user:
+            user.auth0_id = payload["sub"]
+            user.last_login = datetime.now(timezone.utc)
+            return await user_service.update(user)
+
+    # Create new user
+    username = payload.get("nickname") or payload.get("name") or f"user_{uuid4().hex[:8]}"
+    email = email or f"{username}@placeholder.com"
+    return await user_service.create_user_from_auth0(
+        auth0_id=payload["sub"],
+        email=email,
+        username=username
+    )
