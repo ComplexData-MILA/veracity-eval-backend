@@ -9,8 +9,8 @@ engine = create_async_engine(
     echo=settings.DEBUG,
     future=True,
     pool_pre_ping=True,
-    pool_size=2,
-    max_overflow=2,
+    pool_size=65,
+    max_overflow=20,
     pool_timeout=30,
     pool_recycle=1800,
 )
