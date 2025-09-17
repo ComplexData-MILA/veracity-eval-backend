@@ -2,7 +2,6 @@ from typing import Optional
 from uuid import uuid4
 import aiohttp
 from fastapi import HTTPException, Request
-from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import ExpiredSignatureError, jwt
 import json
@@ -117,75 +116,67 @@ class Auth0Middleware:
         except Exception as e:
             logger.error(f"Error fetching user info: {str(e)}")
             return {}
-        
-    async def __call__(self, request: Request, call_next):
+
+    def _generate_username(self, payload: dict) -> str:
+        """Generate username from Auth0 payload."""
+        if nickname := payload.get("nickname"):
+            return nickname
+        if name := payload.get("name"):
+            return name.lower().replace(" ", "_")
+        if email := payload.get("email"):
+            return email.split("@")[0]
+        return f"user_{uuid4().hex[:8]}"
+
+    async def authenticate_request(self, request: Request) -> User:
+        """Authenticate a request and return the user."""
         try:
             credentials = await self.security(request)
-            if credentials:
-                payload = await self._verify_token(credentials.credentials)
-                request.state.user_claims = payload
-            else:
-                request.state.user_claims = None
+            if not credentials:
+                raise HTTPException(status_code=401, detail="No valid authentication credentials found")
+
+            token = credentials.credentials
+            payload = await self._verify_token(token)
+            user_info = await self._fetch_user_info(token)
+            return await self._get_or_create_user({**payload, **user_info})
         except Exception as e:
-            logger.error(f"Authentication error: {e}")
-            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            logger.error(f"Authentication error: {str(e)}")
+            raise HTTPException(status_code=401, detail="Authentication failed")
 
-        return await call_next(request)
+    async def _get_or_create_user(self, user_data: dict) -> User:
+        """Get existing user or create new one."""
+        try:
+            logging.info("session opening")
+            async with AsyncSessionLocal() as session:
+                user_repo = UserRepository(session)
+                user_service = UserService(user_repo)
+                # Try to get user by Auth0 ID
+                user = await user_service.get_by_auth0_id(user_data["sub"])
+                if user:
+                    return await user_service.record_login(user.id)
 
-    # def _generate_username(self, payload: dict) -> str:
-    #     """Generate username from Auth0 payload."""
-    #     if nickname := payload.get("nickname"):
-    #         return nickname
-    #     if name := payload.get("name"):
-    #         return name.lower().replace(" ", "_")
-    #     if email := payload.get("email"):
-    #         return email.split("@")[0]
-    #     return f"user_{uuid4().hex[:8]}"
+                # Try to get user by email
+                email = user_data.get("email")
+                if email:
+                    user = await user_service.get_by_email(email)
+                    if user:
+                        user.auth0_id = user_data["sub"]
+                        user.last_login = datetime.now(UTC)
+                        return await user_service.update(user)
 
-    # async def authenticate_request(self, request: Request) -> User:
-    #     """Authenticate a request and return the user."""
-    #     try:
-    #         credentials = await self.security(request)
-    #         if not credentials:
-    #             raise HTTPException(status_code=401, detail="No valid authentication credentials found")
+                # Create new user
+                username = self._generate_username(user_data)
+                email = user_data.get("email") or f"{username}@placeholder.com"
 
-    #         token = credentials.credentials
-    #         payload = await self._verify_token(token)
-    #         user_info = await self._fetch_user_info(token)
-    #         return await self._get_or_create_user({**payload, **user_info})
-    #     except Exception as e:
-    #         logger.error(f"Authentication error: {str(e)}")
-    #         raise HTTPException(status_code=401, detail="Authentication failed")
-
-    # async def _get_or_create_user(self, user_data: dict) -> User:
-    #     """Get existing user or create new one."""
-    #     try:
-    #         async with AsyncSessionLocal() as session:
-    #             user_repo = UserRepository(session)
-    #             user_service = UserService(user_repo)
-    #             # Try to get user by Auth0 ID
-    #             user = await user_service.get_by_auth0_id(user_data["sub"])
-    #             if user:
-    #                 return await user_service.record_login(user.id)
-
-    #             # Try to get user by email
-    #             email = user_data.get("email")
-    #             if email:
-    #                 user = await user_service.get_by_email(email)
-    #                 if user:
-    #                     user.auth0_id = user_data["sub"]
-    #                     user.last_login = datetime.now(UTC)
-    #                     return await user_service.update(user)
-
-    #             # Create new user
-    #             username = self._generate_username(user_data)
-    #             email = user_data.get("email") or f"{username}@placeholder.com"
-
-    #             return await user_service.create_user_from_auth0(
-    #                 auth0_id=user_data["sub"],
-    #                 email=email,
-    #                 username=username,
-    #             )
-    #     except Exception as e:
-    #         logger.error(f"Error in user management: {str(e)}")
-    #         raise HTTPException(status_code=500, detail="Error processing user data")
+                user = await user_service.create_user_from_auth0(
+                    auth0_id=user_data["sub"],
+                    email=email,
+                    username=username,
+                )
+            # logging.info("session closed")
+            await session.close()
+            return user
+        except Exception as e:
+            logger.error(f"Error in user management: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error processing user data")
+        finally:
+            logging.info("session closed")
