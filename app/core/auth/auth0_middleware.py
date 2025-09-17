@@ -145,7 +145,6 @@ class Auth0Middleware:
     async def _get_or_create_user(self, user_data: dict) -> User:
         """Get existing user or create new one."""
         try:
-            logging.info("session opening")
             async with AsyncSessionLocal() as session:
                 user_repo = UserRepository(session)
                 user_service = UserService(user_repo)
@@ -172,11 +171,8 @@ class Auth0Middleware:
                     email=email,
                     username=username,
                 )
-            # logging.info("session closed")
             await session.close()
             return user
         except Exception as e:
             logger.error(f"Error in user management: {str(e)}")
             raise HTTPException(status_code=500, detail="Error processing user data")
-        finally:
-            logging.info("session closed")

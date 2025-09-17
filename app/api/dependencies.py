@@ -44,13 +44,11 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:
             yield session
-            logger.warning("session yielded")
             await session.commit()
         except Exception:
             await session.rollback()
             raise
         finally:
-            logger.warning("entered finally")
             if session.in_transaction():
                 logger.info("Connection being checked back. Likely a read.")
                 await session.rollback()
