@@ -1,6 +1,8 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from typing import AsyncGenerator
 from app.core.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 engine = create_async_engine(
     settings.get_async_database_url,
@@ -20,12 +22,3 @@ AsyncSessionLocal = async_sessionmaker(
     autocommit=False,
     autoflush=False,
 )
-
-
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """Get a database session."""
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()

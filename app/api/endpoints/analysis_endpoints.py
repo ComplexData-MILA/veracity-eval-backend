@@ -5,10 +5,15 @@ from uuid import UUID
 import logging
 from datetime import datetime
 
-from app.api.dependencies import get_analysis_service, get_auth_middleware, get_orchestrator_service, get_current_user
-from app.core.auth.auth0_middleware import Auth0Middleware
+from app.api.dependencies import (
+    get_analysis_service,
+    get_orchestrator_service,
+    get_current_user,
+    get_claim_service,
+)
 from app.models.domain.user import User
 from app.services.analysis_service import AnalysisService
+from app.services.claim_service import ClaimService
 from app.services.analysis_orchestrator import AnalysisOrchestrator
 from app.schemas.analysis_schema import AnalysisRead
 from app.core.exceptions import NotFoundException
@@ -39,21 +44,24 @@ async def get_analysis(
 async def stream_claim_analysis(
     request: Request,
     claim_id: UUID,
-    auth_middleware: Auth0Middleware = Depends(get_auth_middleware),
+    current_user: User = Depends(get_current_user),
     analysis_orchestrator: AnalysisOrchestrator = Depends(get_orchestrator_service),
+    claim_service: ClaimService = Depends(get_claim_service),
 ) -> StreamingResponse:
     """Stream the analysis process for a claim in real-time."""
     try:
-        current_user = await auth_middleware.authenticate_request(request)
+        # current_user = await auth_middleware.authenticate_request(request)
+
+        claim = await claim_service.get_claim(claim_id=claim_id, user_id=current_user.id)
+
+        session = claim_service._claim_repo._session
 
         async def event_generator():
             try:
                 logger.info(f"Starting analysis stream for claim {claim_id}")
                 yield f"data: {json.dumps({'type': 'status', 'content': 'Initializing analysis...'})}\n\n"
 
-                async for event in analysis_orchestrator.analyze_claim_stream(
-                    claim_id=claim_id, user_id=current_user.id
-                ):
+                async for event in analysis_orchestrator.analyze_claim_stream(claim=claim, user_id=current_user.id):
                     if isinstance(event, dict):
                         yield f"data: {json.dumps(event)}\n\n"
 
@@ -61,6 +69,7 @@ async def stream_claim_analysis(
                 logger.error(f"Error in analysis stream: {str(e)}", exc_info=True)
                 yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
             finally:
+                await session.close()
                 yield "data: [DONE]\n\n"
 
         return StreamingResponse(
@@ -83,12 +92,15 @@ async def stream_claim_analysis(
 async def stream_claim_analysis_exp(
     request: Request,
     claim_id: UUID,
-    auth_middleware: Auth0Middleware = Depends(get_auth_middleware),
+    current_user: User = Depends(get_current_user),
     analysis_orchestrator: AnalysisOrchestrator = Depends(get_orchestrator_service),
+    claim_service: ClaimService = Depends(get_claim_service),
 ) -> StreamingResponse:
     """Stream the analysis process for a claim in real-time."""
     try:
-        current_user = await auth_middleware.authenticate_request(request)
+        claim = await claim_service.get_claim(claim_id=claim_id, user_id=current_user.id)
+
+        session = claim_service._claim_repo._session
 
         async def event_generator():
             try:
@@ -96,7 +108,7 @@ async def stream_claim_analysis_exp(
                 yield f"data: {json.dumps({'type': 'status', 'content': 'Initializing analysis...'})}\n\n"
 
                 async for event in analysis_orchestrator.analyze_claim_stream(
-                    claim_id=claim_id, user_id=current_user.id, default=False
+                    claim=claim, user_id=current_user.id, default=False
                 ):
                     if isinstance(event, dict):
                         yield f"data: {json.dumps(event)}\n\n"
@@ -105,6 +117,7 @@ async def stream_claim_analysis_exp(
                 logger.error(f"Error in analysis stream: {str(e)}", exc_info=True)
                 yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
             finally:
+                await session.close()
                 yield "data: [DONE]\n\n"
 
         return StreamingResponse(

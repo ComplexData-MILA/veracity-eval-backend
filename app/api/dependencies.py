@@ -1,13 +1,13 @@
 import logging
 from fastapi import Depends, Request
-from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import AsyncGenerator
 
 
 from app.core.auth.auth0_middleware import Auth0Middleware
 from app.core.llm.vertex_ai_llama import VertexAILlamaProvider
-from app.db.session import get_session
+
+# from app.db.session import get_session
 from app.models.domain.user import User
 from app.repositories.implementations.claim_conversation_repository import ClaimConversationRepository
 from app.repositories.implementations.user_repository import UserRepository
@@ -35,52 +35,65 @@ from app.services.domain_service import DomainService
 from app.services.source_service import SourceService
 from app.services.search_service import SearchService
 from app.services.feedback_service import FeedbackService
+from app.db.session import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async for session in get_session():
-        yield session
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            logger.warning("session yielded")
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            logger.warning("entered finally")
+            if session.in_transaction():
+                logger.info("Connection being checked back. Likely a read.")
+                await session.rollback()
+            await session.close()
 
 
-async def get_user_repository(session: Session = Depends(get_db)) -> UserRepository:
+async def get_user_repository(session: AsyncSession = Depends(get_db)) -> UserRepository:
     return UserRepository(session)
 
 
-async def get_claim_conversation_repository(session: Session = Depends(get_db)) -> ClaimConversationRepository:
+async def get_claim_conversation_repository(session: AsyncSession = Depends(get_db)) -> ClaimConversationRepository:
     return ClaimConversationRepository(session)
 
 
-async def get_claim_repository(session: Session = Depends(get_db)) -> ClaimRepository:
+async def get_claim_repository(session: AsyncSession = Depends(get_db)) -> ClaimRepository:
     return ClaimRepository(session)
 
 
-async def get_analysis_repository(session: Session = Depends(get_db)) -> AnalysisRepository:
+async def get_analysis_repository(session: AsyncSession = Depends(get_db)) -> AnalysisRepository:
     return AnalysisRepository(session)
 
 
-async def get_message_repository(session: Session = Depends(get_db)) -> MessageRepository:
+async def get_message_repository(session: AsyncSession = Depends(get_db)) -> MessageRepository:
     return MessageRepository(session)
 
 
-async def get_conversation_repository(session: Session = Depends(get_db)) -> ConversationRepository:
+async def get_conversation_repository(session: AsyncSession = Depends(get_db)) -> ConversationRepository:
     return ConversationRepository(session)
 
 
-async def get_domain_repository(session: Session = Depends(get_db)) -> DomainRepository:
+async def get_domain_repository(session: AsyncSession = Depends(get_db)) -> DomainRepository:
     return DomainRepository(session)
 
 
-async def get_source_repository(session: Session = Depends(get_db)) -> SourceRepository:
+async def get_source_repository(session: AsyncSession = Depends(get_db)) -> SourceRepository:
     return SourceRepository(session)
 
 
-async def get_search_repository(session: Session = Depends(get_db)) -> SearchRepository:
+async def get_search_repository(session: AsyncSession = Depends(get_db)) -> SearchRepository:
     return SearchRepository(session)
 
 
-async def get_feedback_repository(session: Session = Depends(get_db)) -> FeedbackRepository:
+async def get_feedback_repository(session: AsyncSession = Depends(get_db)) -> FeedbackRepository:
     return FeedbackRepository(session)
 
 
@@ -198,8 +211,9 @@ async def get_orchestrator_service(
     )
 
 
-def get_auth_middleware(user_service: UserService = Depends(get_user_service)) -> Auth0Middleware:
-    return Auth0Middleware(user_service)
+# TODO Add User repo and User Service dependencies here
+def get_auth_middleware() -> Auth0Middleware:
+    return Auth0Middleware()
 
 
 async def get_current_user(request: Request, auth_middleware: Auth0Middleware = Depends(get_auth_middleware)) -> User:
