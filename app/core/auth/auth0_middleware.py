@@ -9,8 +9,12 @@ import logging
 from datetime import UTC, datetime
 
 from app.core.config import get_settings
+
+# from app.api.dependencies import get_db
+from app.repositories.implementations.user_repository import UserRepository
 from app.services.user_service import UserService
 from app.models.domain.user import User
+from app.db.session import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -44,13 +48,13 @@ class Auth0Bearer(HTTPBearer):
 
 
 class Auth0Middleware:
-    def __init__(self, user_service: UserService):
+    def __init__(self):
         self.domain = settings.AUTH0_DOMAIN
         self.audience = settings.AUTH0_AUDIENCE
         self.issuer = f"https://{settings.AUTH0_DOMAIN}/"
         self.algorithms = settings.AUTH0_ALGORITHMS
         self.jwks = None
-        self.user_service = user_service
+        # self.user_service = user_service
         self.security = Auth0Bearer()
 
     async def _get_jwks(self) -> dict:
@@ -141,29 +145,34 @@ class Auth0Middleware:
     async def _get_or_create_user(self, user_data: dict) -> User:
         """Get existing user or create new one."""
         try:
-            # Try to get user by Auth0 ID
-            user = await self.user_service.get_by_auth0_id(user_data["sub"])
-            if user:
-                return await self.user_service.record_login(user.id)
-
-            # Try to get user by email
-            email = user_data.get("email")
-            if email:
-                user = await self.user_service.get_by_email(email)
+            async with AsyncSessionLocal() as session:
+                user_repo = UserRepository(session)
+                user_service = UserService(user_repo)
+                # Try to get user by Auth0 ID
+                user = await user_service.get_by_auth0_id(user_data["sub"])
                 if user:
-                    user.auth0_id = user_data["sub"]
-                    user.last_login = datetime.now(UTC)
-                    return await self.user_service.update(user)
+                    return await user_service.record_login(user.id)
 
-            # Create new user
-            username = self._generate_username(user_data)
-            email = user_data.get("email") or f"{username}@placeholder.com"
+                # Try to get user by email
+                email = user_data.get("email")
+                if email:
+                    user = await user_service.get_by_email(email)
+                    if user:
+                        user.auth0_id = user_data["sub"]
+                        user.last_login = datetime.now(UTC)
+                        return await user_service.update(user)
 
-            return await self.user_service.create_user_from_auth0(
-                auth0_id=user_data["sub"],
-                email=email,
-                username=username,
-            )
+                # Create new user
+                username = self._generate_username(user_data)
+                email = user_data.get("email") or f"{username}@placeholder.com"
+
+                user = await user_service.create_user_from_auth0(
+                    auth0_id=user_data["sub"],
+                    email=email,
+                    username=username,
+                )
+            await session.close()
+            return user
         except Exception as e:
             logger.error(f"Error in user management: {str(e)}")
             raise HTTPException(status_code=500, detail="Error processing user data")

@@ -494,20 +494,20 @@ class AnalysisOrchestrator:
         return await self._message_repo.create(message)
 
     async def analyze_claim_stream(
-        self, claim_id: UUID, user_id: UUID, default: bool = True
+        self, claim: Claim, user_id: UUID, default: bool = True
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Stream the analysis process for a claim and initialize conversation."""
         try:
-            logger.info(f"Starting analysis for claim {claim_id}")
+            logger.info(f"Starting analysis for claim {claim.id}")
 
-            claim = await self._claim_repo.get(claim_id)
+            # claim = await self._claim_repo.get(claim.id)
             if not claim:
-                raise ValueError(f"Claim {claim_id} not found")
+                raise ValueError("Claim not found")
 
             logger.debug(f"Retrieved claim: {claim.claim_text}")
             self._analysis_state.current_claim = claim
 
-            await self._claim_repo.update_status(claim_id, ClaimStatus.analyzing)
+            await self._claim_repo.update_status(claim.id, ClaimStatus.analyzing)
             yield {"type": "status", "content": "Starting analysis..."}
 
             # Generate analysis
@@ -526,7 +526,7 @@ class AnalysisOrchestrator:
                         user_id=user_id,
                         claim_text=claim.claim_text,
                         analysis_text=analysis.analysis_text,
-                        claim_id=claim_id,
+                        claim_id=claim.id,
                         analysis_id=analysis.id,
                     )
 
@@ -537,16 +537,16 @@ class AnalysisOrchestrator:
                 yield chunk
 
             if analysis_complete:
-                await self._claim_repo.update_status(claim_id, ClaimStatus.analyzed)
-                logger.info(f"Completed analysis for claim {claim_id}")
+                await self._claim_repo.update_status(claim.id, ClaimStatus.analyzed)
+                logger.info(f"Completed analysis for claim {claim.id}")
             else:
-                await self._claim_repo.update_status(claim_id, ClaimStatus.failed)
-                logger.error(f"Analysis incomplete for claim {claim_id}")
+                await self._claim_repo.update_status(claim.id, ClaimStatus.failed)
+                logger.error(f"Analysis incomplete for claim {claim.id}")
 
         except Exception as e:
             logger.error(f"Error in analyze_claim_stream: {str(e)}", exc_info=True)
             if self._analysis_state.current_claim:
-                await self._claim_repo.update_status(claim_id, ClaimStatus.rejected)
+                await self._claim_repo.update_status(claim.id, ClaimStatus.rejected)
             yield {"type": "error", "content": str(e)}
             raise
 

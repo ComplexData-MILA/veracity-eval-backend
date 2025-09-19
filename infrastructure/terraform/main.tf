@@ -116,6 +116,14 @@ resource "google_container_node_pool" "primary_nodes" {
     auto_upgrade = true
   }
 
+  lifecycle {
+    ignore_changes = [
+      node_config[0].resource_labels,
+      node_config[0].metadata,
+      node_config[0].kubelet_config,
+    ]
+  }
+
   node_config {
     preemptible  = false
     machine_type = "e2-medium"
@@ -191,7 +199,7 @@ resource "google_sql_database_instance" "misinformation_mitigation_db" {
   depends_on = [google_service_networking_connection.private_vpc_connection]
 
   settings {
-    tier = "db-f1-micro"
+    tier = "db-custom-1-3840"
 
     ip_configuration {
       ipv4_enabled    = false
