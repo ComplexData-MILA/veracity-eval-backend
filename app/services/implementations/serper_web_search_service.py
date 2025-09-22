@@ -33,37 +33,28 @@ class SerperWebSearchService(WebSearchServiceInterface):
                 "location": "Canada",
                 "gl": "ca"
             }
-            # if language == "english":
-            #     params = {
-            #         "key": self.api_key,
-            #         "cx": self.search_engine_id,
-            #         "q": claim_text,
-            #         "num": min(num_results, 10),
-            #         "fields": "items(title,link,snippet)",
-            #         "lr": "lang_en",
-            #     }
             if language == "french":
-                payload = {  
-                    "q": "apple inc",
-                    "location": "Canada",
-                    "gl": "ca",
-                    "hl": "fr"
-                }
+                payload["hl"] = "fr"
 
             sources = []
+            headers = {
+                "X-API-KEY": self.api_key,
+                "Content-Type": "application/json"
+            }
+
             async with aiohttp.ClientSession() as session:
-                async with session.get(self.search_endpoint, params=params) as response:
+                async with session.post(self.search_endpoint, headers=headers, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
                         logger.error(f"Search API error: {error_text}")
                         return []
 
                     data = await response.json()
-                    if "items" not in data:
+                    if "organic" not in data:
                         logger.warning("No search results found")
                         return []
 
-                    for item in data["items"]:
+                    for item in data["organic"][:5]:
                         try:
                             domain_name = normalize_domain_name(item["link"])
                             domain, is_new = await self.domain_service.get_or_create_domain(domain_name)
@@ -86,6 +77,7 @@ class SerperWebSearchService(WebSearchServiceInterface):
             logger.error(f"Error performing web search: {str(e)}", exc_info=True)
             return []
 
+
     async def _get_existing_source(self, url: str) -> Optional[SourceModel]:
         return await self.source_repository.get_by_url(url)
 
@@ -105,8 +97,8 @@ class SerperWebSearchService(WebSearchServiceInterface):
                 id=uuid4(),
                 search_id=search_id,
                 url=item["link"],
-                title=item["title"],
-                snippet=item["snippet"],
+                title=item.get("title", "Untitled"),
+                snippet=item.get("snippet", ""),
                 domain_id=domain_id,
                 content=None,
                 credibility_score=credibility_score,
