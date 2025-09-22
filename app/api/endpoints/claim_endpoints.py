@@ -4,7 +4,12 @@ from uuid import UUID
 import logging
 from datetime import datetime
 
-from app.api.dependencies import get_claim_service, get_current_user, get_embedding_generator, get_serper_orchestrator_service
+from app.api.dependencies import (
+    get_claim_service,
+    get_current_user,
+    get_embedding_generator,
+    get_serper_orchestrator_service,
+)
 from app.models.database.models import ClaimStatus
 from app.models.domain.user import User
 from app.schemas.claim_schema import (

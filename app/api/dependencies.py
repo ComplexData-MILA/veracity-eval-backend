@@ -183,6 +183,7 @@ async def get_web_search_service(
 ) -> WebSearchServiceInterface:
     return GoogleWebSearchService(domain_service, source_repository)
 
+
 async def get_serper_web_search_service(
     domain_service: DomainService = Depends(get_domain_service),
     source_repository: SourceRepository = Depends(get_source_repository),
@@ -214,6 +215,7 @@ async def get_orchestrator_service(
         web_search_service=web_search_service,
         llm_provider=llm_provider,
     )
+
 
 async def get_serper_orchestrator_service(
     claim_repository: ClaimRepository = Depends(get_claim_repository),

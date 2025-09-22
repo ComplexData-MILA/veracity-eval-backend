@@ -28,19 +28,12 @@ class SerperWebSearchService(WebSearchServiceInterface):
     ) -> List[SourceModel]:
         """Search for sources and create or update records."""
         try:
-            payload = {
-                "q": claim_text,
-                "location": "Canada",
-                "gl": "ca"
-            }
+            payload = {"q": claim_text, "location": "Canada", "gl": "ca"}
             if language == "french":
                 payload["hl"] = "fr"
 
             sources = []
-            headers = {
-                "X-API-KEY": self.api_key,
-                "Content-Type": "application/json"
-            }
+            headers = {"X-API-KEY": self.api_key, "Content-Type": "application/json"}
 
             async with aiohttp.ClientSession() as session:
                 async with session.post(self.search_endpoint, headers=headers, json=payload) as response:
@@ -76,7 +69,6 @@ class SerperWebSearchService(WebSearchServiceInterface):
         except Exception as e:
             logger.error(f"Error performing web search: {str(e)}", exc_info=True)
             return []
-
 
     async def _get_existing_source(self, url: str) -> Optional[SourceModel]:
         return await self.source_repository.get_by_url(url)
