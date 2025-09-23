@@ -4,7 +4,12 @@ from uuid import UUID
 import logging
 from datetime import datetime
 
-from app.api.dependencies import get_claim_service, get_current_user, get_embedding_generator, get_orchestrator_service
+from app.api.dependencies import (
+    get_claim_service,
+    get_current_user,
+    get_embedding_generator,
+    get_serper_orchestrator_service,
+)
 from app.models.database.models import ClaimStatus
 from app.models.domain.user import User
 from app.schemas.claim_schema import (
@@ -54,7 +59,7 @@ async def create_claims_batch(
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     claim_service: ClaimService = Depends(get_claim_service),
-    analysis_orchestrator: AnalysisOrchestrator = Depends(get_orchestrator_service),
+    analysis_orchestrator: AnalysisOrchestrator = Depends(get_serper_orchestrator_service),
 ) -> BatchResponse:
     if len(claims) > 100:
         raise HTTPException(status_code=400, detail="Maximum of 100 claims allowed.")

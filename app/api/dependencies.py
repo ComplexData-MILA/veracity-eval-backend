@@ -23,6 +23,7 @@ from app.core.config import settings
 from app.services.analysis_orchestrator import AnalysisOrchestrator
 from app.services.claim_conversation_service import ClaimConversationService
 from app.services.implementations.web_search_service import GoogleWebSearchService
+from app.services.implementations.serper_web_search_service import SerperWebSearchService
 from app.services.interfaces.web_search_service import WebSearchServiceInterface
 from app.services.implementations.embedding_generator import EmbeddingGenerator
 from app.services.interfaces.embedding_generator import EmbeddingGeneratorInterface
@@ -183,6 +184,13 @@ async def get_web_search_service(
     return GoogleWebSearchService(domain_service, source_repository)
 
 
+async def get_serper_web_search_service(
+    domain_service: DomainService = Depends(get_domain_service),
+    source_repository: SourceRepository = Depends(get_source_repository),
+) -> WebSearchServiceInterface:
+    return SerperWebSearchService(domain_service, source_repository)
+
+
 async def get_orchestrator_service(
     claim_repository: ClaimRepository = Depends(get_claim_repository),
     analysis_repository: AnalysisRepository = Depends(get_analysis_repository),
@@ -209,7 +217,32 @@ async def get_orchestrator_service(
     )
 
 
-# TODO Add User repo and User Service dependencies here
+async def get_serper_orchestrator_service(
+    claim_repository: ClaimRepository = Depends(get_claim_repository),
+    analysis_repository: AnalysisRepository = Depends(get_analysis_repository),
+    conversation_repository: ConversationRepository = Depends(get_conversation_repository),
+    claim_conversation_repository: ClaimConversationRepository = Depends(get_claim_conversation_repository),
+    message_repository: MessageRepository = Depends(get_message_repository),
+    source_repository: SourceRepository = Depends(get_source_repository),
+    search_repository: SearchRepository = Depends(get_search_repository),
+    web_search_service: WebSearchServiceInterface = Depends(get_serper_web_search_service),
+    llm_provider=Depends(get_llm_provider),
+) -> AnalysisOrchestrator:
+    llm_provider = VertexAILlamaProvider(settings)
+
+    return AnalysisOrchestrator(
+        claim_repo=claim_repository,
+        analysis_repo=analysis_repository,
+        conversation_repo=conversation_repository,
+        claim_conversation_repo=claim_conversation_repository,
+        message_repo=message_repository,
+        source_repo=source_repository,
+        search_repo=search_repository,
+        web_search_service=web_search_service,
+        llm_provider=llm_provider,
+    )
+
+
 def get_auth_middleware() -> Auth0Middleware:
     return Auth0Middleware()
 

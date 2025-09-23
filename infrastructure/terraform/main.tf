@@ -286,6 +286,11 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
           }
 
           env {
+            name  = "SERPER_API_KEY"
+            value = var.serper_api_key
+          }
+
+          env {
             name  = "GOOGLE_SEARCH_API_KEY"
             value = var.google_search_api_key
           }
