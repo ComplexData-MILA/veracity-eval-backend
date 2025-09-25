@@ -581,6 +581,10 @@ variable "user_email" {
   default     = "wgarneau@veri-fact.ai"
 }
 
+variable "serper_api_key" {
+  description = "Serper search API Key"
+}
+
 variable "google_search_api_key" {
   description = "Google Search API Key"
 }
