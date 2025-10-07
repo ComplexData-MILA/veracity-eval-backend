@@ -261,9 +261,9 @@ class AnalysisOrchestrator:
                         import re
 
                         try:
-                            veracity_match = re.search(r'"veracity_score":\s*(0?\.\d+)', cleaned_text)
-                            analysis_match = re.search(r'"analysis":\s*"([^"]+)"', cleaned_text)
-
+                            veracity_match = re.search(r'"veracity_score"\s*:\s*([0-9]+(?:\.\d+)?)', cleaned_text)
+                            analysis_match = re.search(r'"analysis"\s*:\s*"((?:[^"\\]|\\.)*)"', cleaned_text, re.DOTALL)
+                            logger.info("Successfully found regex matches")
                             if veracity_match and analysis_match:
                                 veracity_score = int(veracity_match.group(1))
                                 analysis_content = analysis_match.group(1)
