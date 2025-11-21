@@ -23,11 +23,13 @@ from app.core.exceptions import NotFoundException, NotAuthorizedException
 from nltk.corpus import stopwords
 
 import nltk
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 nltk.download("stopwords")
 
 logger = logging.getLogger(__name__)
-
+executor = ThreadPoolExecutor(max_workers=1)
 
 class ClaimService:
     def __init__(self, claim_repository: ClaimRepository, analysis_repository: AnalysisRepository):
@@ -100,10 +102,33 @@ class ClaimService:
         )
 
     async def generate_word_cloud(self, claims: List[Claim]) -> str:
-        claim_texts = list(map(lambda claim: claim.claim_text, claims))
+        def _heavy_word_cloud_math(claims):
+            claim_texts = list(map(lambda claim: claim.claim_text, claims))
 
-        if len(claim_texts) <= 0:
-            wordcloud = WordCloud(background_color="white", colormap="rainbow", margin=0).generate("Empty")
+            if len(claim_texts) <= 0:
+                wordcloud = WordCloud(background_color="white", colormap="rainbow", margin=0).generate("Empty")
+
+                image = wordcloud.to_array()
+                fig = go.Figure(go.Image(z=image))
+
+                fig.update_layout(
+                    xaxis=dict(showgrid=False, zeroline=False, visible=False),
+                    yaxis=dict(showgrid=False, zeroline=False, visible=False),
+                    paper_bgcolor="white",
+                    plot_bgcolor="white",
+                    margin=dict(l=20, r=20, t=20, b=20),
+                )
+                fig_json = fig.to_json()
+                graph = json.loads(fig_json)
+                return graph
+
+            french_stopwords = set(stopwords.words("french"))
+            custom_stopwords = french_stopwords.union(STOPWORDS)
+
+            text = " ".join(claim_texts)
+            wordcloud = WordCloud(
+                background_color="white", colormap="rainbow", margin=0, stopwords=custom_stopwords
+            ).generate(text)
 
             image = wordcloud.to_array()
             fig = go.Figure(go.Image(z=image))
@@ -117,90 +142,88 @@ class ClaimService:
             )
             fig_json = fig.to_json()
             graph = json.loads(fig_json)
+
+            logger.debug("generated word cloud picture")
+
             return graph
+        
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(executor, _heavy_word_cloud_math, claims)
+        return result
 
-        french_stopwords = set(stopwords.words("french"))
-        custom_stopwords = french_stopwords.union(STOPWORDS)
-
-        text = " ".join(claim_texts)
-        wordcloud = WordCloud(
-            background_color="white", colormap="rainbow", margin=0, stopwords=custom_stopwords
-        ).generate(text)
-
-        image = wordcloud.to_array()
-        fig = go.Figure(go.Image(z=image))
-
-        fig.update_layout(
-            xaxis=dict(showgrid=False, zeroline=False, visible=False),
-            yaxis=dict(showgrid=False, zeroline=False, visible=False),
-            paper_bgcolor="white",
-            plot_bgcolor="white",
-            margin=dict(l=20, r=20, t=20, b=20),
-        )
-        fig_json = fig.to_json()
-        graph = json.loads(fig_json)
-
-        logger.debug("generated word cloud picture")
-
-        return graph
 
     async def generate_clustering_graph(self, claims: List[Claim], num_clusters: int) -> str:
 
-        claim_embed = list(map(lambda claim: claim.embedding, filter(lambda c: c.embedding is not None, claims)))
+        def _heavy_clustering_math(claims, num_clusters):
+            claim_embed = list(map(lambda claim: claim.embedding, filter(lambda c: c.embedding is not None, claims)))
 
-        if len(claim_embed) < 3:
-            fig = go.Figure()
-            fig.update_layout(
-                title=None,  # Remove title
-                xaxis_title=None,  # Remove x-axis title
-                yaxis_title=None,  # Remove y-axis title
-                xaxis=dict(showticklabels=False),  # Hide x-axis numbers
-                yaxis=dict(showticklabels=False),  # Hide y-axis numbers
-                template="plotly_white",
-            )
-            fig_json = fig.to_json()
-            graph = json.loads(fig_json)
-            return graph
-        else:
-            # Reduce embedding size
-            X = np.array(claim_embed)
-            X_embedded = TSNE(n_components=2, learning_rate="auto", init="random", perplexity=3).fit_transform(X)
-            kmeans = KMeans(n_clusters=num_clusters, random_state=0, n_init="auto").fit(X_embedded)
+            if len(claim_embed) > 5000:
+                logging.info("claim embed greater than 6000")
+                import random
+                random.seed(42)
+                claim_embed = random.sample(claim_embed, 5000)
 
-            df = pd.DataFrame(X_embedded, columns=["x", "y"])
-            df["cluster"] = kmeans.labels_  # Assign KMeans labels
+            if len(claim_embed) < 3:
+                fig = go.Figure()
+                fig.update_layout(
+                    title=None,  # Remove title
+                    xaxis_title=None,  # Remove x-axis title
+                    yaxis_title=None,  # Remove y-axis title
+                    xaxis=dict(showticklabels=False),  # Hide x-axis numbers
+                    yaxis=dict(showticklabels=False),  # Hide y-axis numbers
+                    template="plotly_white",
+                )
+                fig_json = fig.to_json()
+                graph = json.loads(fig_json)
+                return graph
+            else:
+                # Reduce embedding size
+                X = np.array(claim_embed, dtype=np.float32)
+                if len(claim_embed) < 30 :
+                    X_embedded = TSNE(n_components=2, learning_rate="auto", init="random", perplexity=len(claim_embed)-1).fit_transform(X)
+                else: 
+                    X_embedded = TSNE(n_components=2, learning_rate="auto", init="random", perplexity=30).fit_transform(X)
 
-            df["claim_text"] = [claim.claim_text for claim in claims if claim.embedding is not None]
+                kmeans = KMeans(n_clusters=num_clusters, random_state=0, n_init="auto").fit(X_embedded)
 
-            fig = px.scatter(
-                df,
-                x="x",
-                y="y",
-                color=df["cluster"].astype(str),
-                title=None,
-                labels={"cluster": "Cluster", "claim_text": "Claim text"},
-                color_discrete_sequence=px.colors.qualitative.Set1,  # Custom color scheme
-                template="plotly_white",
-                hover_data={
-                    "x": False,  # Remove x-axis data from hover
-                    "y": False,  # Remove y-axis data from hover
-                    "cluster": True,  # Rename the color to 'cluster'
-                    "claim_text": True,  # Show claim_text
-                },
-            )
+                df = pd.DataFrame(X_embedded, columns=["x", "y"])
+                df["cluster"] = kmeans.labels_  # Assign KMeans labels
 
-            fig.update_layout(
-                xaxis_title=None,
-                yaxis_title=None,
-                xaxis=dict(showticklabels=False),
-                yaxis=dict(showticklabels=False),
-                legend_title="Cluster",  # Set custom legend title
-            )
+                df["claim_text"] = [ (c.claim_text[:100] + "...") if len(c.claim_text) > 100 else c.claim_text for c in claims if c.embedding is not None]
+                    # claim.claim_text for claim in claims if claim.embedding is not None
 
-            fig_json = fig.to_json()
-            graph = json.loads(fig_json)
+                fig = px.scatter(
+                    df,
+                    x="x",
+                    y="y",
+                    color=df["cluster"].astype(str),
+                    title=None,
+                    labels={"cluster": "Cluster", "claim_text": "Claim text"},
+                    color_discrete_sequence=px.colors.qualitative.Set1,  # Custom color scheme
+                    template="plotly_white",
+                    hover_data={
+                        "x": False,  # Remove x-axis data from hover
+                        "y": False,  # Remove y-axis data from hover
+                        "cluster": True,  # Rename the color to 'cluster'
+                        "claim_text": True,  # Show claim_text
+                    },
+                )
 
-            return graph
+                fig.update_layout(
+                    xaxis_title=None,
+                    yaxis_title=None,
+                    xaxis=dict(showticklabels=False),
+                    yaxis=dict(showticklabels=False),
+                    legend_title="Cluster",  # Set custom legend title
+                )
+
+                fig_json = fig.to_json()
+                graph = json.loads(fig_json)
+
+                return graph
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(executor, _heavy_clustering_math, claims, num_clusters)
+        return result
 
     async def create_claims_batch(self, claims: List[Claim], user_id: str) -> List[Claim]:
         # Map ClaimCreate + user_id → Claim DB objects
