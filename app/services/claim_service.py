@@ -31,6 +31,7 @@ nltk.download("stopwords")
 logger = logging.getLogger(__name__)
 executor = ThreadPoolExecutor(max_workers=1)
 
+
 class ClaimService:
     def __init__(self, claim_repository: ClaimRepository, analysis_repository: AnalysisRepository):
         self._claim_repo = claim_repository
@@ -146,20 +147,19 @@ class ClaimService:
             logger.debug("generated word cloud picture")
 
             return graph
-        
+
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(executor, _heavy_word_cloud_math, claims)
         return result
 
-
     async def generate_clustering_graph(self, claims: List[Claim], num_clusters: int) -> str:
-
         def _heavy_clustering_math(claims, num_clusters):
             claim_embed = list(map(lambda claim: claim.embedding, filter(lambda c: c.embedding is not None, claims)))
 
             if len(claim_embed) > 5000:
                 logging.info("claim embed greater than 6000")
                 import random
+
                 random.seed(42)
                 claim_embed = random.sample(claim_embed, 5000)
 
@@ -179,18 +179,26 @@ class ClaimService:
             else:
                 # Reduce embedding size
                 X = np.array(claim_embed, dtype=np.float32)
-                if len(claim_embed) < 30 :
-                    X_embedded = TSNE(n_components=2, learning_rate="auto", init="random", perplexity=len(claim_embed)-1).fit_transform(X)
-                else: 
-                    X_embedded = TSNE(n_components=2, learning_rate="auto", init="random", perplexity=30).fit_transform(X)
+                if len(claim_embed) < 30:
+                    X_embedded = TSNE(
+                        n_components=2, learning_rate="auto", init="random", perplexity=len(claim_embed) - 1
+                    ).fit_transform(X)
+                else:
+                    X_embedded = TSNE(n_components=2, learning_rate="auto", init="random", perplexity=30).fit_transform(
+                        X
+                    )
 
                 kmeans = KMeans(n_clusters=num_clusters, random_state=0, n_init="auto").fit(X_embedded)
 
                 df = pd.DataFrame(X_embedded, columns=["x", "y"])
                 df["cluster"] = kmeans.labels_  # Assign KMeans labels
 
-                df["claim_text"] = [ (c.claim_text[:100] + "...") if len(c.claim_text) > 100 else c.claim_text for c in claims if c.embedding is not None]
-                    # claim.claim_text for claim in claims if claim.embedding is not None
+                df["claim_text"] = [
+                    (c.claim_text[:100] + "...") if len(c.claim_text) > 100 else c.claim_text
+                    for c in claims
+                    if c.embedding is not None
+                ]
+                # claim.claim_text for claim in claims if claim.embedding is not None
 
                 fig = px.scatter(
                     df,
@@ -221,6 +229,7 @@ class ClaimService:
                 graph = json.loads(fig_json)
 
                 return graph
+
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(executor, _heavy_clustering_math, claims, num_clusters)
         return result
