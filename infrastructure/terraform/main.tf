@@ -280,6 +280,17 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
           image = "gcr.io/${var.project_id}/misinformation-mitigation-api:latest"
           name  = "misinformation-mitigation-api"
 
+          resources {
+            requests = {
+              memory = "1Gi"   # Guarantees space, prevents 10-pod explosion
+              cpu    = "500m"
+            }
+            limits = {
+              memory = "2.5Gi" # Hard cap to prevent freezing the Node
+              cpu    = "1000m"
+            }
+          }
+
           env {
             name  = "DATABASE_URL"
             value = "postgresql://misinformation_mitigation_user:${var.db_password}@127.0.0.1:5432/misinformation_mitigation_db"
