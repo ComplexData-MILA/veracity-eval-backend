@@ -88,11 +88,13 @@ class AnalysisPrompt:
     GET_CONFIDENCE = """
     You will be provided with an original user statement, and your own previous response to that statement
     (which included an explanation and a veracity score).
+    For context, this statment and explanation was run {date}.
     Your task now is to carefully review your
     previous response and provide a new score reflecting your epistemic self-certainty about it.
     Original User Statement: “{statement}”
     Your Previous Response to this Statement:
     Explanation: “{analysis}”
+    A summary of the sources you used to determine this Explanation: "{sources}"
     Veracity Score (0-100, where 0=Definitively False, 50=Uncertain, 100=Definitively True): {veracity}
     Now, carefully consider YOUR PREVIOUS RESPONSE package above.
     Critically evaluate your previous explanation and veracity score for the original user statement.

@@ -239,7 +239,10 @@ class AnalysisOrchestrator:
 
                         if not default:
                             con_score = await self._generate_confidence_score(
-                                statement=claim_text, analysis=analysis_content, veracity=veracity_score
+                                statement=claim_text,
+                                analysis=analysis_content,
+                                sources=sources_text,
+                                veracity=veracity_score,
                             )
                             logger.warning(con_score)
                             current_analysis.confidence_score = float(con_score) / 100.0
@@ -704,11 +707,17 @@ class AnalysisOrchestrator:
         else:
             raise ValidationError("Claim Language is invalid")
 
-    async def _generate_confidence_score(self, statement: str, analysis: str, veracity: str):
+    async def _generate_confidence_score(self, statement: str, analysis: str, sources: str, veracity: str):
         messages = [
             LLMMessage(
                 role="user",
-                content=AnalysisPrompt.GET_CONFIDENCE.format(statement=statement, analysis=analysis, veracity=veracity),
+                content=AnalysisPrompt.GET_CONFIDENCE.format(
+                    date=datetime.now().isoformat(),
+                    statement=statement,
+                    analysis=analysis,
+                    sources=sources,
+                    veracity=veracity,
+                ),
             )
         ]
         response = await self._llm.generate_response(messages)
