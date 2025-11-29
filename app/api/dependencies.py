@@ -6,6 +6,7 @@ from typing import AsyncGenerator
 
 from app.core.auth.auth0_middleware import Auth0Middleware
 from app.core.llm.vertex_ai_llama import VertexAILlamaProvider
+from app.core.llm.together_ai_llama import TogetherAIProvider
 
 # from app.db.session import get_session
 from app.models.domain.user import User
@@ -176,6 +177,13 @@ async def get_llm_provider():
         logger.error(f"Failed to initialize LLM provider: {str(e)}", exc_info=True)
         raise
 
+async def get_together_llm_provider():
+    try:
+        provider = TogetherAIProvider(settings)
+        return provider
+    except Exception as e:
+        logger.error(f"Failed to initialize LLM provider: {str(e)}", exc_info=True)
+        raise
 
 async def get_web_search_service(
     domain_service: DomainService = Depends(get_domain_service),
@@ -216,6 +224,30 @@ async def get_orchestrator_service(
         llm_provider=llm_provider,
     )
 
+async def get_together_orchestrator_service(
+    claim_repository: ClaimRepository = Depends(get_claim_repository),
+    analysis_repository: AnalysisRepository = Depends(get_analysis_repository),
+    conversation_repository: ConversationRepository = Depends(get_conversation_repository),
+    claim_conversation_repository: ClaimConversationRepository = Depends(get_claim_conversation_repository),
+    message_repository: MessageRepository = Depends(get_message_repository),
+    source_repository: SourceRepository = Depends(get_source_repository),
+    search_repository: SearchRepository = Depends(get_search_repository),
+    web_search_service: WebSearchServiceInterface = Depends(get_web_search_service),
+    llm_provider=Depends(get_together_llm_provider),
+) -> AnalysisOrchestrator:
+    llm_provider = TogetherAIProvider(settings)
+
+    return AnalysisOrchestrator(
+        claim_repo=claim_repository,
+        analysis_repo=analysis_repository,
+        conversation_repo=conversation_repository,
+        claim_conversation_repo=claim_conversation_repository,
+        message_repo=message_repository,
+        source_repo=source_repository,
+        search_repo=search_repository,
+        web_search_service=web_search_service,
+        llm_provider=llm_provider,
+    )
 
 async def get_serper_orchestrator_service(
     claim_repository: ClaimRepository = Depends(get_claim_repository),

@@ -10,6 +10,7 @@ from app.api.dependencies import (
     get_orchestrator_service,
     get_current_user,
     get_claim_service,
+    get_together_orchestrator_service,
 )
 from app.models.domain.user import User
 from app.services.analysis_service import AnalysisService
@@ -93,7 +94,7 @@ async def stream_claim_analysis_exp(
     request: Request,
     claim_id: UUID,
     current_user: User = Depends(get_current_user),
-    analysis_orchestrator: AnalysisOrchestrator = Depends(get_orchestrator_service),
+    analysis_orchestrator: AnalysisOrchestrator = Depends(get_together_orchestrator_service),
     claim_service: ClaimService = Depends(get_claim_service),
 ) -> StreamingResponse:
     """Stream the analysis process for a claim in real-time."""
