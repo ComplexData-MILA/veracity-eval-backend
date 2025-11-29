@@ -7,5 +7,5 @@ os.environ["HF_HOME"] = "/app/hf_cache"
 
 print("⏳ Downloading embedding model to build...")
 # 2. This triggers the download
-model = SentenceTransformer('all-MiniLM-L6-v2')
+model = SentenceTransformer("all-MiniLM-L6-v2")
 print("✅ Model downloaded successfully.")

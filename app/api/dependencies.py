@@ -177,6 +177,7 @@ async def get_llm_provider():
         logger.error(f"Failed to initialize LLM provider: {str(e)}", exc_info=True)
         raise
 
+
 async def get_together_llm_provider():
     try:
         provider = TogetherAIProvider(settings)
@@ -184,6 +185,7 @@ async def get_together_llm_provider():
     except Exception as e:
         logger.error(f"Failed to initialize LLM provider: {str(e)}", exc_info=True)
         raise
+
 
 async def get_web_search_service(
     domain_service: DomainService = Depends(get_domain_service),
@@ -224,6 +226,7 @@ async def get_orchestrator_service(
         llm_provider=llm_provider,
     )
 
+
 async def get_together_orchestrator_service(
     claim_repository: ClaimRepository = Depends(get_claim_repository),
     analysis_repository: AnalysisRepository = Depends(get_analysis_repository),
@@ -248,6 +251,7 @@ async def get_together_orchestrator_service(
         web_search_service=web_search_service,
         llm_provider=llm_provider,
     )
+
 
 async def get_serper_orchestrator_service(
     claim_repository: ClaimRepository = Depends(get_claim_repository),

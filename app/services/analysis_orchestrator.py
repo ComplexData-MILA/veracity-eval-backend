@@ -243,10 +243,8 @@ class AnalysisOrchestrator:
                         current_analysis.updated_at = datetime.now(UTC)
 
                         if not default:
-                            
-                            con_score = await self._generate_logprob_confidence_score(
-                                log_probs = log_probs
-                            )
+
+                            con_score = await self._generate_logprob_confidence_score(log_probs=log_probs)
                             logger.info(con_score)
                             current_analysis.confidence_score = float(con_score)
 
@@ -713,16 +711,16 @@ class AnalysisOrchestrator:
     async def _generate_logprob_confidence_score(self, log_probs: list[float]):
         if not log_probs:
             return 0.0
-        
+
         try:
             # 1. Calculate the average of the log-probabilities
             #    (This represents the geometric mean in log-space)
             avg_logprob = sum(log_probs) / len(log_probs)
-            
+
             # 2. Convert back to linear probability (0.0 to 1.0)
             return math.exp(avg_logprob)
-            
-        except Exception as e:
+
+        except Exception:
             # Safety fallback for edge cases like overflow (unlikely with logprobs)
             return 0.0
 
