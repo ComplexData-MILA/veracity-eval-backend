@@ -27,6 +27,8 @@ class Settings(BaseSettings):
 
     SERPER_API_KEY: str = ""
 
+    TOGETHER_API_KEY: str = ""
+
     LLAMA_MODEL_NAME: str = "meta/llama-3.3-70b-instruct-maas"
 
     AUTH0_DOMAIN: str = "veri-fact.ca.auth0.com"
@@ -76,6 +78,7 @@ class Settings(BaseSettings):
         print(f"GOOGLE_SEARCH_ENGINE_ID: {self.GOOGLE_SEARCH_ENGINE_ID}")
         print(f"Google Search API configured: {bool(self.GOOGLE_SEARCH_API_KEY)}")
         print(f"Serper Search API configured: {bool(self.SERPER_API_KEY)}")
+        print(f"Together AI API configured: {bool(self.TOGETHER_API_KEY)}")
         print(f"LLAMA_MODEL_NAME: {self.LLAMA_MODEL_NAME}")
         print("=====================================\n")
 

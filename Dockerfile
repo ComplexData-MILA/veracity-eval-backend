@@ -17,4 +17,10 @@ COPY . .
 
 ENV PYTHONPATH=/app
 
+ENV HF_HOME="/app/hf_cache"
+
+# 4. RUN THE PRELOAD SCRIPT
+# This downloads the 80MB model and saves it into the image layers
+RUN python app/preload_model.py
+
 CMD ["./docker-entrypoint.sh"]

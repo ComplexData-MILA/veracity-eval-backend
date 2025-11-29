@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import json
 import re
 from copy import deepcopy
+import math
 
 from app.core.exceptions import NotAuthorizedException, NotFoundException, ValidationError
 from app.core.llm.interfaces import LLMProvider
@@ -193,13 +194,17 @@ class AnalysisOrchestrator:
                 messages += [LLMMessage(role="user", content=AnalysisPrompt.GET_VERACITY_FR)]
 
             analysis_text = []
+            log_probs = []
 
             async for chunk in self._llm.generate_stream(messages):
                 if not chunk.is_complete:
                     analysis_text.append(chunk.text)
+                    log_probs.append(chunk.metadata.get("logprobs"))
                     yield {"type": "content", "content": chunk.text}
                 else:
                     full_text = "".join(analysis_text)
+                    logger.warning(f"length {len(analysis_text)}, {analysis_text}")
+                    logger.warning(f"length {len(log_probs)}, {log_probs}")
 
                     try:
                         # Clean the text before parsing
@@ -238,14 +243,10 @@ class AnalysisOrchestrator:
                         current_analysis.updated_at = datetime.now(UTC)
 
                         if not default:
-                            con_score = await self._generate_confidence_score(
-                                statement=claim_text,
-                                analysis=analysis_content,
-                                sources=sources_text,
-                                veracity=veracity_score,
-                            )
-                            logger.warning(con_score)
-                            current_analysis.confidence_score = float(con_score) / 100.0
+
+                            con_score = await self._generate_logprob_confidence_score(log_probs=log_probs)
+                            logger.info(con_score)
+                            current_analysis.confidence_score = float(con_score)
 
                         updated_analysis = await self._analysis_repo.update(current_analysis)
 
@@ -706,6 +707,22 @@ class AnalysisOrchestrator:
             return AnalysisPrompt.ORCHESTRATOR_PROMPT_FR.format(statement=statement, date=datetime.now().isoformat())
         else:
             raise ValidationError("Claim Language is invalid")
+
+    async def _generate_logprob_confidence_score(self, log_probs: list[float]):
+        if not log_probs:
+            return 0.0
+
+        try:
+            # 1. Calculate the average of the log-probabilities
+            #    (This represents the geometric mean in log-space)
+            avg_logprob = sum(log_probs) / len(log_probs)
+
+            # 2. Convert back to linear probability (0.0 to 1.0)
+            return math.exp(avg_logprob)
+
+        except Exception:
+            # Safety fallback for edge cases like overflow (unlikely with logprobs)
+            return 0.0
 
     async def _generate_confidence_score(self, statement: str, analysis: str, sources: str, veracity: str):
         messages = [

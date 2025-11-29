@@ -291,6 +291,11 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
           }
 
           env {
+            name = "TOGETHER_API_KEY"
+            value = var.together_api_key
+          }
+
+          env {
             name  = "GOOGLE_SEARCH_API_KEY"
             value = var.google_search_api_key
           }
@@ -583,6 +588,10 @@ variable "user_email" {
 
 variable "serper_api_key" {
   description = "Serper search API Key"
+}
+
+variable "together_api_key" {
+  description = "Together AI API Key"
 }
 
 variable "google_search_api_key" {
