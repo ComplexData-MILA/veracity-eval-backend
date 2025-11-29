@@ -8,7 +8,6 @@ services:
       - "8001:8001"
     volumes:
       - .:/app
-      - ./hf_cache:/app/hf_cache
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql://will:nordai123@misinformation_mitigation_db/mitigation_misinformation_db}
       - HF_HOME=/app/hf_cache
