@@ -16,3 +16,4 @@ service-account.json
 .env.global
 get-pip.py
 .DS_Store
+hf_cache/
