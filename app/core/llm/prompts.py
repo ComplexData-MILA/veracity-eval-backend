@@ -109,6 +109,19 @@ class AnalysisPrompt:
     Limitations of Previous Response: [LLM fills this]
     Overall Confidence in Previous Response (0-100): [LLM provides numerical score]
     """
+    GET_ANTH_CONFIDENCE = """
+    Statement: {statement} 
+    Label: {label} 
+    Is the given label correct for the statement? 
+    Answer yes or no:
+    """
+
+    GET_ANTH_CONFIDENCE_MOD = """
+    Statement: {statement} 
+    Label: {label} 
+    Is the given label correct for the statement? 
+    Answer ONLY yes or no:
+    """
 
     HIGH_ASSERT = """
 
