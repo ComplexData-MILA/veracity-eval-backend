@@ -119,8 +119,16 @@ class AnalysisPrompt:
     GET_ANTH_CONFIDENCE_MOD = """
     Statement: {statement} 
     Label: {label} 
-    Is the given label correct for the statement? 
-    Answer ONLY yes or no:
+    Explanation: {explanation}
+    Given the generated explanation, is the given label correct for the statement?
+    Answer yes or no:
+    """
+
+    GET_ANTH_CONFIDENCE_MOD_2 = """
+    Statement: {statement} 
+    Veracity score (a score from 0 to 100, where 0 represents definitively false and 100 represents definitively true): {score} 
+    Is the given veracity score correct for the statement?
+    Answer yes or no:
     """
 
     HIGH_ASSERT = """

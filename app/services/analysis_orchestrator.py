@@ -203,8 +203,8 @@ class AnalysisOrchestrator:
                     yield {"type": "content", "content": chunk.text}
                 else:
                     full_text = "".join(analysis_text)
-                    logger.warning(f"length {len(analysis_text)}, {analysis_text}")
-                    logger.warning(f"length {len(log_probs)}, {log_probs}")
+                    # logger.warning(f"length {len(analysis_text)}, {analysis_text}")
+                    # logger.warning(f"length {len(log_probs)}, {log_probs}")
 
                     try:
                         # Clean the text before parsing
@@ -247,8 +247,8 @@ class AnalysisOrchestrator:
                             con_score = await self._generate_logprob_confidence_score(log_probs=log_probs)
                             logger.info(con_score)
                             current_analysis.confidence_score = float(con_score)
-                            log_data = await self._get_anth_confidence_score(statement=claim_text, veracity_score=veracity_score)
-                            current_analysis.log_probs = log_data
+                            # log_data = await self._get_anth_confidence_score(statement=claim_text, veracity_score=veracity_score)
+                            # current_analysis.log_probs = log_data
 
                         updated_analysis = await self._analysis_repo.update(current_analysis)
 
@@ -751,19 +751,19 @@ class AnalysisOrchestrator:
         return ""
     
     async def _get_anth_confidence_score(self, statement: str, veracity_score: float):
-        label = 'true'
-        if veracity_score < 50:
-            label ='false'
-        elif veracity_score == 50:
-            label = 'unknown'
+        # label = 'true'
+        # if veracity_score < 50:
+        #     label ='false'
+        # elif veracity_score == 50:
+        #     label = 'unknown'
 
         messages = [
             LLMMessage(
                 role="user",
-                content=AnalysisPrompt.GET_ANTH_CONFIDENCE.format(
+                content=AnalysisPrompt.GET_ANTH_CONFIDENCE_MOD_2.format(
                     date=datetime.now().isoformat(),
                     statement=statement,
-                    label=label,
+                    score=veracity_score,
                 ),
             )
         ]
