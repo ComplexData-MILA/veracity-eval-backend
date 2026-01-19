@@ -24,6 +24,11 @@ router = APIRouter(prefix="/analysis", tags=["analysis"])
 logger = logging.getLogger(__name__)
 
 
+@router.post("/create", response_model=AnalysisRead)
+async def create_analysis_test(data: AnalysisRead) -> AnalysisRead:
+    pass
+
+
 @router.get("/{analysis_id}", response_model=AnalysisRead)
 async def get_analysis(
     analysis_id: UUID,

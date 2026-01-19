@@ -65,7 +65,7 @@ class TogetherAIProvider(LLMProvider):
                 messages=[{"role": m.role, "content": m.content} for m in messages],
                 temperature=temperature,
                 # CRITICAL: This enables the confidence data you need
-                logprobs=1,
+                logprobs=5,
             )
 
             choice = response.choices[0]

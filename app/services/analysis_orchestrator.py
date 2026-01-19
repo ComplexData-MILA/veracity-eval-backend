@@ -11,7 +11,7 @@ from app.core.exceptions import NotAuthorizedException, NotFoundException, Valid
 from app.core.llm.interfaces import LLMProvider
 from app.models.database.models import AnalysisStatus, ClaimStatus, ConversationStatus, MessageSenderType
 from app.models.domain.claim import Claim
-from app.models.domain.analysis import Analysis
+from app.models.domain.analysis import Analysis, LogProbsData
 from app.models.domain.search import Search
 from app.models.domain.message import Message
 from app.core.llm.messages import Message as LLMMessage
@@ -203,8 +203,8 @@ class AnalysisOrchestrator:
                     yield {"type": "content", "content": chunk.text}
                 else:
                     full_text = "".join(analysis_text)
-                    logger.warning(f"length {len(analysis_text)}, {analysis_text}")
-                    logger.warning(f"length {len(log_probs)}, {log_probs}")
+                    # logger.warning(f"length {len(analysis_text)}, {analysis_text}")
+                    # logger.warning(f"length {len(log_probs)}, {log_probs}")
 
                     try:
                         # Clean the text before parsing
@@ -247,6 +247,8 @@ class AnalysisOrchestrator:
                             con_score = await self._generate_logprob_confidence_score(log_probs=log_probs)
                             logger.info(con_score)
                             current_analysis.confidence_score = float(con_score)
+                            # log_data = await self._get_anth_confidence_score(statement=claim_text, veracity_score=veracity_score)
+                            # current_analysis.log_probs = log_data
 
                         updated_analysis = await self._analysis_repo.update(current_analysis)
 
@@ -747,6 +749,55 @@ class AnalysisOrchestrator:
             return match[-1]
 
         return ""
+
+    async def _get_anth_confidence_score(self, statement: str, veracity_score: float):
+        # label = 'true'
+        # if veracity_score < 50:
+        #     label ='false'
+        # elif veracity_score == 50:
+        #     label = 'unknown'
+
+        messages = [
+            LLMMessage(
+                role="user",
+                content=AnalysisPrompt.GET_ANTH_CONFIDENCE_MOD_2.format(
+                    date=datetime.now().isoformat(),
+                    statement=statement,
+                    score=veracity_score,
+                ),
+            )
+        ]
+        response = await self._llm.generate_response(messages)
+        raw_logprobs = response.metadata.get("raw_logprobs")
+
+        # Initialize defaults
+        log_probs_obj = LogProbsData(anth_conf_score=0, tokens=[], probs=[], alternatives=[])
+
+        if raw_logprobs:
+            # 2. Get the log_prob for "Yes" from the first token's alternatives
+            # First entry in top_logprobs list, get the value for key 'Yes'
+            first_token_alts = raw_logprobs.top_logprobs[0]
+
+            p_yes = sum(math.exp(val) for key, val in first_token_alts.items() if key.strip().lower() == "yes")
+
+            p_no = sum(math.exp(val) for key, val in first_token_alts.items() if key.strip().lower() == "no")
+
+            # Convert log probability to linear probability: p = exp(log_p)
+            pvlm_score = 0
+            if p_yes + p_no == 0:
+                pvlm_score = 0.5  # Neutral/Uncertain
+            else:
+                pvlm_score = p_yes / (p_yes + p_no)
+
+            # 3. Construct the LogProbsData object
+            log_probs_obj = LogProbsData(
+                anth_conf_score=pvlm_score,
+                tokens=raw_logprobs.tokens,
+                probs=raw_logprobs.token_logprobs,
+                alternatives=raw_logprobs.top_logprobs,
+            )
+        logger.info(f"Confidence: {pvlm_score}, Data: {log_probs_obj}")
+        return log_probs_obj
 
     def _extract_search_query_or_none(
         self,

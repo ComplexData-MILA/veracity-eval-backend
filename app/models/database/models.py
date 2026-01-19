@@ -17,6 +17,7 @@ from sqlalchemy import (
     text,
     ARRAY,
     DOUBLE_PRECISION,
+    LargeBinary,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -147,6 +148,8 @@ class AnalysisModel(Base):
         nullable=False,
         index=True,
     )
+
+    log_probs: Mapped[bytes] = mapped_column(LargeBinary, nullable=True)
 
     claim: Mapped["ClaimModel"] = relationship(back_populates="analyses", doc="Related claim")
     searches: Mapped[List["SearchModel"]] = relationship(back_populates="analysis", cascade="all, delete-orphan")
