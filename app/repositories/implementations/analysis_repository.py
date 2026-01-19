@@ -17,29 +17,11 @@ class AnalysisRepository(BaseRepository[AnalysisModel, Analysis]):
         super().__init__(session, AnalysisModel)
 
     def _to_model(self, analysis: Analysis) -> AnalysisModel:
-        return AnalysisModel(
-            id=analysis.id,
-            claim_id=analysis.claim_id,
-            veracity_score=analysis.veracity_score,
-            confidence_score=analysis.confidence_score,
-            analysis_text=analysis.analysis_text,
-            status=AnalysisStatus(analysis.status),
-        )
+        return analysis.to_model()
 
     def _to_domain(self, model: AnalysisModel) -> Analysis:
         """Convert database model to domain model without loading relationships."""
-        return Analysis(
-            id=model.id,
-            claim_id=model.claim_id,
-            veracity_score=model.veracity_score,
-            confidence_score=model.confidence_score,
-            analysis_text=model.analysis_text,
-            status=model.status.value,
-            created_at=model.created_at,
-            updated_at=model.updated_at,
-            searches=None,
-            feedback=None,
-        )
+        return Analysis.from_model_safe(model)
 
     async def create(self, analysis: Analysis) -> Analysis:
         """Create new analysis."""
