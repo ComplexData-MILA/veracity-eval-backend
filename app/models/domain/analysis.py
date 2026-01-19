@@ -8,6 +8,7 @@ from app.models.database.models import AnalysisModel, AnalysisStatus
 from app.models.domain.feedback import Feedback
 from app.models.domain.search import Search
 
+
 @dataclass
 class LogProbsData:
     anth_conf_score: float
@@ -35,7 +36,7 @@ class Analysis:
     @classmethod
     def from_model(cls, model: "AnalysisModel") -> "Analysis":
         """Create domain model from database model."""
-        
+
         log_probs_obj = None
         if model.log_probs:
             try:
@@ -43,7 +44,7 @@ class Analysis:
             except Exception:
                 # Fallback in case unpickling fails (e.g., corrupt data)
                 log_probs_obj = None
-        
+
         return cls(
             id=model.id,
             claim_id=model.claim_id,
@@ -61,14 +62,14 @@ class Analysis:
     @classmethod
     def from_model_safe(cls, model: "AnalysisModel") -> "Analysis":
         """Create domain model from database model, explicitly ignoring relationships."""
-        
+
         log_probs_obj = None
         if model.log_probs:
             try:
                 log_probs_obj = pickle.loads(model.log_probs)
             except Exception:
                 log_probs_obj = None
-        
+
         return cls(
             id=model.id,
             claim_id=model.claim_id,
@@ -80,10 +81,10 @@ class Analysis:
             updated_at=model.updated_at,
             log_probs=log_probs_obj,
             # empty initalization (they are empty at creation)
-            searches=None, 
+            searches=None,
             feedback=None,
         )
-    
+
     def to_model(self) -> "AnalysisModel":
         """Convert to database model."""
 

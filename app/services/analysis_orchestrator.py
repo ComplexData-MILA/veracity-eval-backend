@@ -749,7 +749,7 @@ class AnalysisOrchestrator:
             return match[-1]
 
         return ""
-    
+
     async def _get_anth_confidence_score(self, statement: str, veracity_score: float):
         # label = 'true'
         # if veracity_score < 50:
@@ -768,8 +768,8 @@ class AnalysisOrchestrator:
             )
         ]
         response = await self._llm.generate_response(messages)
-        raw_logprobs = response.metadata.get('raw_logprobs')
-    
+        raw_logprobs = response.metadata.get("raw_logprobs")
+
         # Initialize defaults
         log_probs_obj = LogProbsData(anth_conf_score=0, tokens=[], probs=[], alternatives=[])
 
@@ -777,18 +777,10 @@ class AnalysisOrchestrator:
             # 2. Get the log_prob for "Yes" from the first token's alternatives
             # First entry in top_logprobs list, get the value for key 'Yes'
             first_token_alts = raw_logprobs.top_logprobs[0]
-            
-            p_yes = sum(
-                math.exp(val) 
-                for key, val in first_token_alts.items() 
-                if key.strip().lower() == 'yes'
-            )
 
-            p_no = sum(
-                math.exp(val) 
-                for key, val in first_token_alts.items() 
-                if key.strip().lower() == 'no'
-            )
+            p_yes = sum(math.exp(val) for key, val in first_token_alts.items() if key.strip().lower() == "yes")
+
+            p_no = sum(math.exp(val) for key, val in first_token_alts.items() if key.strip().lower() == "no")
 
             # Convert log probability to linear probability: p = exp(log_p)
             pvlm_score = 0
@@ -797,13 +789,12 @@ class AnalysisOrchestrator:
             else:
                 pvlm_score = p_yes / (p_yes + p_no)
 
-
             # 3. Construct the LogProbsData object
             log_probs_obj = LogProbsData(
                 anth_conf_score=pvlm_score,
                 tokens=raw_logprobs.tokens,
                 probs=raw_logprobs.token_logprobs,
-                alternatives=raw_logprobs.top_logprobs
+                alternatives=raw_logprobs.top_logprobs,
             )
         logger.info(f"Confidence: {pvlm_score}, Data: {log_probs_obj}")
         return log_probs_obj

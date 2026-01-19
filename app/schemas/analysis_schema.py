@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from uuid import UUID
-from typing import Optional, List
+from typing import Optional
 from app.models.domain.analysis import LogProbsData
 
 

@@ -110,23 +110,23 @@ class AnalysisPrompt:
     Overall Confidence in Previous Response (0-100): [LLM provides numerical score]
     """
     GET_ANTH_CONFIDENCE = """
-    Statement: {statement} 
-    Label: {label} 
-    Is the given label correct for the statement? 
+    Statement: {statement}
+    Label: {label}
+    Is the given label correct for the statement?
     Answer yes or no:
     """
 
     GET_ANTH_CONFIDENCE_MOD = """
-    Statement: {statement} 
-    Label: {label} 
+    Statement: {statement}
+    Label: {label}
     Explanation: {explanation}
     Given the generated explanation, is the given label correct for the statement?
     Answer yes or no:
     """
 
     GET_ANTH_CONFIDENCE_MOD_2 = """
-    Statement: {statement} 
-    Veracity score (a score from 0 to 100, where 0 represents definitively false and 100 represents definitively true): {score} 
+    Statement: {statement}
+    Veracity score (a score from 0 to 100, where 0 represents definitively false and 100 represents definitively true): {score}
     Is the given veracity score correct for the statement?
     Answer yes or no:
     """
