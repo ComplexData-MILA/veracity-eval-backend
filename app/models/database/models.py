@@ -63,6 +63,14 @@ class UserModel(Base):
     claims: Mapped[List["ClaimModel"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     conversations: Mapped[List["ConversationModel"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     feedbacks: Mapped[List["FeedbackModel"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    discussions: Mapped[List["DiscussionModel"]] = relationship(
+        back_populates="user", 
+        passive_deletes=True
+    )
+    posts: Mapped[List["PostModel"]] = relationship(
+        back_populates="user", 
+        passive_deletes=True
+    )
 
 
 class DomainModel(Base):
@@ -147,6 +155,7 @@ class AnalysisModel(Base):
         cascade="all, delete-orphan",
         primaryjoin="FeedbackModel.analysis_id == AnalysisModel.id",
     )
+    discussions: Mapped[List["DiscussionModel"]] = relationship(back_populates="analysis", passive_deletes=True)
     messages: Mapped[List["MessageModel"]] = relationship(back_populates="analysis", doc="Related analysis, if any")
 
     __table_args__ = (
@@ -154,6 +163,77 @@ class AnalysisModel(Base):
         CheckConstraint("confidence_score >= 0 AND confidence_score <= 1", name="check_confidence_score_range"),
     )
 
+
+class DiscussionModel(Base):
+    __tablename__ = "discussions"
+
+    analysis_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("analysis.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    title: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    description: Mapped[str] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    user_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"), # If User dies, set this to NULL
+        nullable=True, # Must be True for SET NULL to work
+        index=True,
+    )
+
+    # Relationships
+    user: Mapped["UserModel"] = relationship(back_populates="discussions")
+
+    analysis: Mapped["AnalysisModel"] = relationship(back_populates="discussions")
+
+    posts: Mapped[List["PostModel"]] = relationship(back_populates="discussion", cascade="all, delete-orphan")
+
+class PostModel(Base):
+    __tablename__ = "posts"
+
+    discussion_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("discussions.id"),
+        nullable=False,
+        index=True,
+    )
+
+    text: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    up_votes: Mapped[str] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    down_votes: Mapped[str] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    user_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"), # If User dies, set this to NULL
+        nullable=True, # Must be True for SET NULL to work
+        index=True,
+    )
+
+    # Relationships
+    user: Mapped["UserModel"] = relationship(back_populates="posts")
+
+    discussion: Mapped["DiscussionModel"] = relationship(back_populates="posts")
 
 class SearchModel(Base):
     __tablename__ = "searches"
@@ -178,7 +258,6 @@ class SearchModel(Base):
     analysis: Mapped["AnalysisModel"] = relationship(back_populates="searches")
 
     sources: Mapped[List["SourceModel"]] = relationship(back_populates="search", cascade="all, delete-orphan")
-
 
 class SourceModel(Base):
     __tablename__ = "sources"
