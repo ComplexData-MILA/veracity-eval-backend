@@ -11,10 +11,8 @@ from app.models.domain.search import Search
 
 @dataclass
 class LogProbsData:
-    anth_conf_score: float
     tokens: List[str]
     probs: List[float]
-    alternatives: List[Dict[str, float]]
 
 
 @dataclass
