@@ -25,6 +25,7 @@ from app.services.claim_service import ClaimService
 from app.services.analysis_orchestrator import AnalysisOrchestrator
 from app.core.exceptions import NotFoundException, NotAuthorizedException
 from app.services.interfaces.embedding_generator import EmbeddingGeneratorInterface
+from app.core.exceptions import MonthlyLimitExceededError
 
 router = APIRouter(prefix="/claims", tags=["claims"])
 logger = logging.getLogger(__name__)
@@ -45,8 +46,12 @@ async def create_claim(
             language=data.language,
             batch_user_id=data.batch_user_id,
             batch_post_id=data.batch_post_id,
+            auth0_id=current_user.auth0_id,
         )
         return ClaimRead.model_validate(claim)
+    except MonthlyLimitExceededError:
+        # We don't have 'e.limit' anymore, so we just say "Limit reached"
+        raise HTTPException(status_code=429, detail="You have reached your monthly claim limit.")
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create claim: {str(e)}"
@@ -65,12 +70,19 @@ async def create_claims_batch(
         raise HTTPException(status_code=400, detail="Maximum of 100 claims allowed.")
 
     try:
-        created_claims = await claim_service.create_claims_batch(claims, current_user.id)
+        created_claims = await claim_service.create_claims_batch(
+            claims,
+            current_user.id,
+            auth0_id=current_user.auth0_id,
+        )
         claim_ids = [str(claim.id) for claim in created_claims]
         background_tasks.add_task(
             claim_service.process_claims_batch_async, created_claims, current_user.id, analysis_orchestrator
         )
         return {"message": f"Processing {len(created_claims)} claims in the background.", "claim_ids": claim_ids}
+    except MonthlyLimitExceededError:
+        # We don't have 'e.limit' anymore, so we just say "Limit reached"
+        raise HTTPException(status_code=429, detail="You have reached your monthly claim limit.")
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to queue batch: {str(e)}"

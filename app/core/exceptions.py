@@ -39,6 +39,17 @@ class DuplicateUserError(Exception):
 
 
 """
+Claim exceptions
+"""
+
+
+class MonthlyLimitExceededError(Exception):
+    """Raised when a user hits their monthly claim limit."""
+
+    pass
+
+
+"""
 Feedback exceptions
 """
 
