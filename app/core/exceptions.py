@@ -37,6 +37,7 @@ class DuplicateUserError(Exception):
 
     pass
 
+
 """
 Claim exceptions
 """

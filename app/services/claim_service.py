@@ -35,6 +35,7 @@ executor = ThreadPoolExecutor(max_workers=1)
 RESTRICTED_CLIENT_ID = "hHRhJr5OoJhWumP87MHk5RldejycVAmC@clients"
 MONTHLY_LIMIT = 3000
 
+
 class ClaimService:
     def __init__(self, claim_repository: ClaimRepository, analysis_repository: AnalysisRepository):
         self._claim_repo = claim_repository
@@ -56,7 +57,7 @@ class ClaimService:
         if auth0_id is not None:
             if auth0_id == RESTRICTED_CLIENT_ID:
                 current_count = await self._claim_repo.get_monthly_claim_count(user_id)
-                
+
                 if current_count >= MONTHLY_LIMIT:
                     raise MonthlyLimitExceededError()
         claim = Claim(
@@ -245,13 +246,18 @@ class ClaimService:
         result = await loop.run_in_executor(executor, _heavy_clustering_math, claims, num_clusters)
         return result
 
-    async def create_claims_batch(self, claims: List[Claim], user_id: str, auth0_id: str = None,) -> List[Claim]:
+    async def create_claims_batch(
+        self,
+        claims: List[Claim],
+        user_id: str,
+        auth0_id: str = None,
+    ) -> List[Claim]:
         # Map ClaimCreate + user_id → Claim DB objects
         now = datetime.now(UTC)
         if auth0_id is not None:
             if auth0_id == RESTRICTED_CLIENT_ID:
                 current_count = await self._claim_repo.get_monthly_claim_count(user_id)
-                
+
                 if current_count + len(claims) >= MONTHLY_LIMIT:
                     raise MonthlyLimitExceededError()
         claim_models = [

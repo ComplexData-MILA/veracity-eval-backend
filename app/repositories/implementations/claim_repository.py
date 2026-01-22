@@ -93,10 +93,10 @@ class ClaimRepository(BaseRepository[ClaimModel, Claim], ClaimRepositoryInterfac
         )
         result = await self._session.execute(stmt)
         return [self._to_domain(claim) for claim in result.scalars().all()]
-    
+
     async def get_monthly_claim_count(self, user_id: str) -> int:
         """Counts how many claims a user has created this month."""
-        
+
         # Calculate the 1st of the current month
         now = datetime.now(UTC)
         start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -104,12 +104,9 @@ class ClaimRepository(BaseRepository[ClaimModel, Claim], ClaimRepositoryInterfac
         query = (
             select(func.count())
             .select_from(ClaimModel)
-            .where(
-                ClaimModel.user_id == user_id,
-                ClaimModel.created_at >= start_of_month
-            )
+            .where(ClaimModel.user_id == user_id, ClaimModel.created_at >= start_of_month)
         )
-        
+
         result = await self._session.execute(query)
         return result.scalar_one()
 
