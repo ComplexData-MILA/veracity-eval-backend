@@ -17,6 +17,7 @@ from app.models.domain.claim import Claim
 from app.repositories.implementations.claim_repository import ClaimRepository
 from app.repositories.implementations.analysis_repository import AnalysisRepository
 from app.services.analysis_orchestrator import AnalysisOrchestrator
+from app.core.exceptions import MonthlyLimitExceededError
 
 from app.core.exceptions import NotFoundException, NotAuthorizedException
 
@@ -31,6 +32,8 @@ nltk.download("stopwords")
 logger = logging.getLogger(__name__)
 executor = ThreadPoolExecutor(max_workers=1)
 
+RESTRICTED_CLIENT_ID = "hHRhJr5OoJhWumP87MHk5RldejycVAmC@clients"
+MONTHLY_LIMIT = 3000
 
 class ClaimService:
     def __init__(self, claim_repository: ClaimRepository, analysis_repository: AnalysisRepository):
@@ -45,9 +48,17 @@ class ClaimService:
         language: str,
         batch_user_id: str = None,
         batch_post_id: str = None,
+        auth0_id: str = None,
     ) -> Claim:
         """Create a new claim."""
         now = datetime.now(UTC)
+
+        if auth0_id is not None:
+            if auth0_id == RESTRICTED_CLIENT_ID:
+                current_count = await self._claim_repo.get_monthly_claim_count(user_id)
+                
+                if current_count >= MONTHLY_LIMIT:
+                    raise MonthlyLimitExceededError()
         claim = Claim(
             id=uuid4(),
             user_id=user_id,
@@ -234,9 +245,15 @@ class ClaimService:
         result = await loop.run_in_executor(executor, _heavy_clustering_math, claims, num_clusters)
         return result
 
-    async def create_claims_batch(self, claims: List[Claim], user_id: str) -> List[Claim]:
+    async def create_claims_batch(self, claims: List[Claim], user_id: str, auth0_id: str = None,) -> List[Claim]:
         # Map ClaimCreate + user_id → Claim DB objects
         now = datetime.now(UTC)
+        if auth0_id is not None:
+            if auth0_id == RESTRICTED_CLIENT_ID:
+                current_count = await self._claim_repo.get_monthly_claim_count(user_id)
+                
+                if current_count + len(claims) >= MONTHLY_LIMIT:
+                    raise MonthlyLimitExceededError()
         claim_models = [
             Claim(
                 id=uuid4(),
