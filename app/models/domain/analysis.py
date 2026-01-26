@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, List
 from uuid import UUID
 import pickle
 
@@ -11,10 +11,8 @@ from app.models.domain.search import Search
 
 @dataclass
 class LogProbsData:
-    anth_conf_score: float
     tokens: List[str]
     probs: List[float]
-    alternatives: List[Dict[str, float]]
 
 
 @dataclass

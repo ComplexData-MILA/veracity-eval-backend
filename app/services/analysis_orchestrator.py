@@ -248,7 +248,8 @@ class AnalysisOrchestrator:
                             logger.info(con_score)
                             current_analysis.confidence_score = float(con_score)
                             # log_data = await self._get_anth_confidence_score(statement=claim_text, veracity_score=veracity_score)
-                            # current_analysis.log_probs = log_data
+                            log_data = LogProbsData(tokens=analysis_text, probs=log_probs)
+                            current_analysis.log_probs = log_data
 
                         updated_analysis = await self._analysis_repo.update(current_analysis)
 
