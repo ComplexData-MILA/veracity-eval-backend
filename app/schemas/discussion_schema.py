@@ -20,3 +20,11 @@ class PaginatedDiscussionsResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+class DiscussionCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    analysis_id: Optional[UUID] = None
+
+    class Config:
+        from_attributes = True
