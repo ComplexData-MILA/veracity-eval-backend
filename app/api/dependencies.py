@@ -20,6 +20,8 @@ from app.repositories.implementations.domain_repository import DomainRepository
 from app.repositories.implementations.source_repository import SourceRepository
 from app.repositories.implementations.search_repository import SearchRepository
 from app.repositories.implementations.feedback_repository import FeedbackRepository
+from app.repositories.implementations.discussion_repository import DiscussionRepository
+from app.repositories.implementations.post_repository import PostRepository
 from app.core.config import settings
 from app.services.analysis_orchestrator import AnalysisOrchestrator
 from app.services.claim_conversation_service import ClaimConversationService
@@ -37,6 +39,8 @@ from app.services.domain_service import DomainService
 from app.services.source_service import SourceService
 from app.services.search_service import SearchService
 from app.services.feedback_service import FeedbackService
+from app.services.discussion_service import DiscussionService
+from app.services.post_service import PostService
 from app.db.session import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
@@ -96,6 +100,11 @@ async def get_search_repository(session: AsyncSession = Depends(get_db)) -> Sear
 async def get_feedback_repository(session: AsyncSession = Depends(get_db)) -> FeedbackRepository:
     return FeedbackRepository(session)
 
+async def get_discussion_repository(session: AsyncSession = Depends(get_db)) -> DiscussionRepository:
+    return DiscussionRepository(session)
+
+async def get_post_repository(session: AsyncSession = Depends(get_db)) -> PostRepository:
+    return PostRepository(session)
 
 async def get_embedding_generator() -> EmbeddingGeneratorInterface:
     return EmbeddingGenerator()
@@ -226,6 +235,19 @@ async def get_orchestrator_service(
         llm_provider=llm_provider,
     )
 
+async def get_discussion_service(
+    discussion_repository: DiscussionRepository = Depends(get_discussion_repository),  
+) -> DiscussionService:
+    return DiscussionService(
+        discussion_repository=discussion_repository
+    )
+
+async def get_post_service(
+    post_repository: PostRepository = Depends(get_post_repository),  
+) -> PostService:
+    return PostService(
+        post_repository=post_repository
+    )
 
 async def get_together_orchestrator_service(
     claim_repository: ClaimRepository = Depends(get_claim_repository),
