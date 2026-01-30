@@ -36,8 +36,6 @@ class PostRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def get_user_posts(
-        self, user_id: UUID, limit: int = 50, offset: int = 0
-    ) -> Tuple[List[Post], int]:
+    async def get_user_posts(self, user_id: UUID, limit: int = 50, offset: int = 0) -> Tuple[List[Post], int]:
         """Get posts created by a specific user."""
         pass

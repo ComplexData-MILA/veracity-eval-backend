@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, UTC
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 from uuid import UUID, uuid4
 
 from app.models.domain.post import Post
@@ -55,13 +55,9 @@ class PostService:
     ) -> Tuple[List[Post], int]:
         """List posts for a specific discussion."""
         # Optional: verify discussion exists first if you want strict checking
-        return await self._post_repo.get_by_discussion_id(
-            discussion_id=discussion_id, limit=limit, offset=offset
-        )
+        return await self._post_repo.get_by_discussion_id(discussion_id=discussion_id, limit=limit, offset=offset)
 
-    async def list_user_posts(
-        self, user_id: UUID, limit: int = 50, offset: int = 0
-    ) -> Tuple[List[Post], int]:
+    async def list_user_posts(self, user_id: UUID, limit: int = 50, offset: int = 0) -> Tuple[List[Post], int]:
         """List posts made by a specific user."""
         return await self._post_repo.get_user_posts(user_id=user_id, limit=limit, offset=offset)
 

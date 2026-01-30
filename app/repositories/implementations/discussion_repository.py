@@ -1,7 +1,7 @@
 import logging
 from typing import Optional, List, Tuple
 from uuid import UUID
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database.models import DiscussionModel
@@ -23,7 +23,7 @@ class DiscussionRepository(BaseRepository[DiscussionModel, Discussion], Discussi
             description=domain.description,
             analysis_id=domain.analysis_id,
             user_id=domain.user_id,
-            # created_at/updated_at are typically handled by DB defaults, 
+            # created_at/updated_at are typically handled by DB defaults,
             # but can be passed if the domain sets them explicitly
         )
 
@@ -47,34 +47,32 @@ class DiscussionRepository(BaseRepository[DiscussionModel, Discussion], Discussi
     async def get_user_discussions(
         self, user_id: UUID, limit: int = 20, offset: int = 0
     ) -> Tuple[List[Discussion], int]:
-        
+
         # 1. Build Query
         query = select(self._model_class).where(self._model_class.user_id == user_id)
-        
+
         # 2. Get Total Count
         count_query = select(func.count()).select_from(self._model_class).where(self._model_class.user_id == user_id)
         total = await self._session.scalar(count_query)
 
         # 3. Apply Limit/Offset/Order
         query = query.order_by(self._model_class.created_at.desc()).limit(limit).offset(offset)
-        
+
         result = await self._session.execute(query)
         discussions = [self._to_domain(model) for model in result.scalars().all()]
 
         return discussions, total
 
-    async def get_recent_discussions(
-        self, limit: int = 20, offset: int = 0
-    ) -> Tuple[List[Discussion], int]:
-        
+    async def get_recent_discussions(self, limit: int = 20, offset: int = 0) -> Tuple[List[Discussion], int]:
+
         query = select(self._model_class)
         count_query = select(func.count()).select_from(self._model_class)
-        
+
         total = await self._session.scalar(count_query)
-        
+
         query = query.order_by(self._model_class.created_at.desc()).limit(limit).offset(offset)
-        
+
         result = await self._session.execute(query)
         discussions = [self._to_domain(model) for model in result.scalars().all()]
-        
+
         return discussions, total

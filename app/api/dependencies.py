@@ -100,11 +100,14 @@ async def get_search_repository(session: AsyncSession = Depends(get_db)) -> Sear
 async def get_feedback_repository(session: AsyncSession = Depends(get_db)) -> FeedbackRepository:
     return FeedbackRepository(session)
 
+
 async def get_discussion_repository(session: AsyncSession = Depends(get_db)) -> DiscussionRepository:
     return DiscussionRepository(session)
 
+
 async def get_post_repository(session: AsyncSession = Depends(get_db)) -> PostRepository:
     return PostRepository(session)
+
 
 async def get_embedding_generator() -> EmbeddingGeneratorInterface:
     return EmbeddingGenerator()
@@ -235,19 +238,18 @@ async def get_orchestrator_service(
         llm_provider=llm_provider,
     )
 
+
 async def get_discussion_service(
-    discussion_repository: DiscussionRepository = Depends(get_discussion_repository),  
+    discussion_repository: DiscussionRepository = Depends(get_discussion_repository),
 ) -> DiscussionService:
-    return DiscussionService(
-        discussion_repository=discussion_repository
-    )
+    return DiscussionService(discussion_repository=discussion_repository)
+
 
 async def get_post_service(
-    post_repository: PostRepository = Depends(get_post_repository),  
+    post_repository: PostRepository = Depends(get_post_repository),
 ) -> PostService:
-    return PostService(
-        post_repository=post_repository
-    )
+    return PostService(post_repository=post_repository)
+
 
 async def get_together_orchestrator_service(
     claim_repository: ClaimRepository = Depends(get_claim_repository),

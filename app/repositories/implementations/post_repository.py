@@ -1,7 +1,7 @@
 import logging
-from typing import Optional, List, Tuple
+from typing import List, Tuple
 from uuid import UUID
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database.models import PostModel
@@ -42,19 +42,17 @@ class PostRepository(BaseRepository[PostModel, Post], PostRepositoryInterface):
     async def get_by_discussion_id(
         self, discussion_id: UUID, limit: int = 50, offset: int = 0
     ) -> Tuple[List[Post], int]:
-        
+
         # Base query
         query = select(self._model_class).where(self._model_class.discussion_id == discussion_id)
-        
+
         # Count query
         count_query = (
-            select(func.count())
-            .select_from(self._model_class)
-            .where(self._model_class.discussion_id == discussion_id)
+            select(func.count()).select_from(self._model_class).where(self._model_class.discussion_id == discussion_id)
         )
         total = await self._session.scalar(count_query)
 
-        # Ordering (Usually oldest first for chats/threads, or usually newest first? 
+        # Ordering (Usually oldest first for chats/threads, or usually newest first?
         # Standard forums usually do Oldest -> Newest. Comments sections usually do Newest -> Oldest.
         # I will default to Created At ASC (Oldest first) for reading a thread properly).
         query = query.order_by(self._model_class.created_at.asc()).limit(limit).offset(offset)
@@ -64,17 +62,11 @@ class PostRepository(BaseRepository[PostModel, Post], PostRepositoryInterface):
 
         return posts, total
 
-    async def get_user_posts(
-        self, user_id: UUID, limit: int = 50, offset: int = 0
-    ) -> Tuple[List[Post], int]:
-        
+    async def get_user_posts(self, user_id: UUID, limit: int = 50, offset: int = 0) -> Tuple[List[Post], int]:
+
         query = select(self._model_class).where(self._model_class.user_id == user_id)
-        
-        count_query = (
-            select(func.count())
-            .select_from(self._model_class)
-            .where(self._model_class.user_id == user_id)
-        )
+
+        count_query = select(func.count()).select_from(self._model_class).where(self._model_class.user_id == user_id)
         total = await self._session.scalar(count_query)
 
         # For user history, Newest first is standard

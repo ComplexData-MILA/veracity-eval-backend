@@ -56,9 +56,7 @@ class DiscussionService:
             raise NotFoundException("Discussion for this analysis not found")
         return discussion
 
-    async def list_recent_discussions(
-        self, limit: int = 20, offset: int = 0
-    ) -> Tuple[List[Discussion], int]:
+    async def list_recent_discussions(self, limit: int = 20, offset: int = 0) -> Tuple[List[Discussion], int]:
         """List all discussions ordered by recency."""
         return await self._discussion_repo.get_recent_discussions(limit=limit, offset=offset)
 
@@ -90,7 +88,7 @@ class DiscussionService:
             discussion.title = title
         if description is not None:
             discussion.description = description
-        
+
         discussion.updated_at = datetime.now(UTC)
-        
+
         return await self._discussion_repo.update(discussion)

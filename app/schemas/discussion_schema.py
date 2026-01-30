@@ -3,6 +3,7 @@ from uuid import UUID
 from datetime import datetime
 from pydantic import BaseModel
 
+
 class DiscussionResponse(BaseModel):
     id: UUID
     title: str
@@ -13,13 +14,15 @@ class DiscussionResponse(BaseModel):
     updated_at: datetime
 
     class Config:
-        from_attributes = True # Allows mapping from your Domain/DB models
+        from_attributes = True  # Allows mapping from your Domain/DB models
+
 
 class PaginatedDiscussionsResponse(BaseModel):
     items: List[DiscussionResponse]
     total: int
     limit: int
     offset: int
+
 
 class DiscussionCreate(BaseModel):
     title: str

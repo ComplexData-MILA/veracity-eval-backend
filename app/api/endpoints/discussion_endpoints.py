@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Query, status, HTTPException
-from typing import Optional
+
+# from typing import Optional
 from uuid import UUID
 import logging
 
@@ -7,11 +8,13 @@ from app.models.domain.user import User
 from app.services.discussion_service import DiscussionService
 from app.schemas.discussion_schema import DiscussionResponse, PaginatedDiscussionsResponse, DiscussionCreate
 from app.api.dependencies import get_discussion_service, get_current_user
-# 'get_current_user_optional' is useful if you want to know WHO is asking, 
+
+# 'get_current_user_optional' is useful if you want to know WHO is asking,
 # but allow anonymous users to read discussions.
 
 router = APIRouter(prefix="/discussions", tags=["discussions"])
 logger = logging.getLogger(__name__)
+
 
 @router.get("/user", response_model=PaginatedDiscussionsResponse, status_code=status.HTTP_200_OK)
 async def get_discussions_per_user(
@@ -28,13 +31,8 @@ async def get_discussions_per_user(
     if current_user.id:
         discussions, total = await service.list_user_discussions(current_user.id, limit=limit, offset=offset)
 
+    return {"items": discussions, "total": total, "limit": limit, "offset": offset}
 
-    return {
-        "items": discussions,
-        "total": total,
-        "limit": limit,
-        "offset": offset
-    }
 
 @router.get("/", response_model=PaginatedDiscussionsResponse, status_code=status.HTTP_200_OK)
 async def get_recent_discussions(
@@ -50,13 +48,8 @@ async def get_recent_discussions(
 
     discussions, total = await service.list_recent_discussions(limit=limit, offset=offset)
 
+    return {"items": discussions, "total": total, "limit": limit, "offset": offset}
 
-    return {
-        "items": discussions,
-        "total": total,
-        "limit": limit,
-        "offset": offset
-    }
 
 @router.get("/{discussion_id}", response_model=DiscussionResponse)
 async def get_discussion_by_id(
@@ -68,8 +61,9 @@ async def get_discussion_by_id(
         return await service.get_discussion(discussion_id)
     except Exception as e:
         # Assuming your service raises NotFoundException
-        raise HTTPException(status_code=404, detail="Discussion not found")
-    
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 @router.post("/", response_model=DiscussionResponse, status_code=status.HTTP_201_CREATED)
 async def create_discussion(
     payload: DiscussionCreate,
@@ -85,7 +79,7 @@ async def create_discussion(
         title=payload.title,
         description=payload.description,
         analysis_id=payload.analysis_id,
-        user_id=current_user.id  # Matches your User model field
+        user_id=current_user.id,  # Matches your User model field
     )
-    
+
     return discussion

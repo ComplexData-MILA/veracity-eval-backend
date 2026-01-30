@@ -39,10 +39,8 @@ class DiscussionRepositoryInterface(ABC):
     ) -> Tuple[List[Discussion], int]:
         """Get discussions started by a user with pagination."""
         pass
-        
+
     @abstractmethod
-    async def get_recent_discussions(
-        self, limit: int = 20, offset: int = 0
-    ) -> Tuple[List[Discussion], int]:
+    async def get_recent_discussions(self, limit: int = 20, offset: int = 0) -> Tuple[List[Discussion], int]:
         """Get a list of all discussions, ordered by recency."""
         pass
