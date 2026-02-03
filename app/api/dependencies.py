@@ -247,8 +247,9 @@ async def get_discussion_service(
 
 async def get_post_service(
     post_repository: PostRepository = Depends(get_post_repository),
+    discussion_repository: DiscussionRepository = Depends(get_discussion_repository),
 ) -> PostService:
-    return PostService(post_repository=post_repository)
+    return PostService(post_repository=post_repository, discussion_repository=discussion_repository)
 
 
 async def get_together_orchestrator_service(
