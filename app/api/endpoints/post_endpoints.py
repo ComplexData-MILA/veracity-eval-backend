@@ -12,6 +12,7 @@ from app.core.exceptions import NotFoundException, NotAuthorizedException
 router = APIRouter(prefix="/posts", tags=["Posts"])
 logger = logging.getLogger(__name__)
 
+
 # --- CREATE POST ---
 @router.post("/", response_model=PostResponse, status_code=status.HTTP_201_CREATED)
 async def create_post(
@@ -22,15 +23,14 @@ async def create_post(
     """Create a new post in a discussion."""
     try:
         return await service.create_post(
-            discussion_id=payload.discussion_id,
-            user_id=current_user.id,
-            text=payload.text
+            discussion_id=payload.discussion_id, user_id=current_user.id, text=payload.text
         )
     except NotFoundException as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.exception("Error creating post")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # --- UPDATE POST TEXT ---
 @router.put("/{post_id}", response_model=PostResponse)
@@ -45,18 +45,15 @@ async def update_post_content(
     Only the creator of the post can do this.
     """
     try:
-        return await service.update_post_text(
-            post_id=post_id,
-            user_id=current_user.id,
-            new_text=payload.text
-        )
+        return await service.update_post_text(post_id=post_id, user_id=current_user.id, new_text=payload.text)
     except NotFoundException as e:
         raise HTTPException(status_code=404, detail=str(e))
     except NotAuthorizedException as e:
         raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
         logger.exception("Error updating post")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # --- VOTE ON POST ---
 @router.put("/{post_id}/vote", response_model=PostResponse)
@@ -71,17 +68,15 @@ async def vote_on_post(
     Payload: {"vote_type": "up"} or {"vote_type": "down"}
     """
     try:
-        return await service.vote_post(
-            post_id=post_id,
-            vote_type=payload.vote_type
-        )
+        return await service.vote_post(post_id=post_id, vote_type=payload.vote_type)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except NotFoundException as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.exception("Error voting on post")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # --- DELETE POST ---
 @router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -99,7 +94,8 @@ async def delete_post(
         raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
         logger.exception("Error deleting post")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # --- GET POSTS BY DISCUSSION ---
 @router.get("/discussion/{discussion_id}", response_model=List[PostResponse])
@@ -110,9 +106,5 @@ async def list_posts_for_discussion(
     service: PostService = Depends(get_post_service),
 ):
     """List all posts belonging to a specific discussion."""
-    posts, _ = await service.list_discussion_posts(
-        discussion_id=discussion_id, 
-        limit=limit, 
-        offset=offset
-    )
+    posts, _ = await service.list_discussion_posts(discussion_id=discussion_id, limit=limit, offset=offset)
     return posts
