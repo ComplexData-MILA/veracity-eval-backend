@@ -19,6 +19,7 @@ from app.services.analysis_orchestrator import AnalysisOrchestrator
 from app.schemas.analysis_schema import AnalysisRead
 from app.core.exceptions import NotFoundException
 from fastapi.responses import StreamingResponse
+from app.core.scoring import get_percentile
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 logger = logging.getLogger(__name__)
@@ -41,7 +42,11 @@ async def get_analysis(
         analysis = await analysis_service.get_analysis(
             analysis_id=analysis_id, include_sources=include_sources, include_feedback=include_feedback
         )
-        return AnalysisRead.model_validate(analysis)
+        raw_score = analysis.confidence_score
+        percentile = (get_percentile(raw_score)) / 100.0
+        analysis = AnalysisRead.model_validate(analysis)
+        analysis.confidence_percentile = percentile
+        return analysis
     except NotFoundException as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 from uuid import UUID
 from typing import Optional
@@ -17,6 +17,9 @@ class AnalysisRead(BaseModel):
     claim_id: UUID
     veracity_score: float
     confidence_score: float
+    confidence_percentile: Optional[float] = Field(
+        None, description="The percentile rank of this analysis's confidence score compared to all other claims."
+    )
     analysis_text: str
     created_at: datetime
     log_probs: Optional[LogProbsData]

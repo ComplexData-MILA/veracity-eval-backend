@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
 from app.api.router import router
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.auth.auth0_middleware import Auth0Middleware
+from app.core.scoring import load_distribution
 
 # from app.services.user_service import UserService
 # from app.repositories.implementations.user_repository import UserRepository
@@ -10,6 +12,11 @@ from app.core.auth.auth0_middleware import Auth0Middleware
 import logging
 
 formatter = logging.Formatter(fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+
+BASE_DIR = Path(__file__).resolve().parent
+
+# Point to the CSV in that same folder
+DISTRIBUTION_FILE = str(BASE_DIR / "distribution_1497.csv")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,6 +40,7 @@ async def lifespan(app: FastAPI):
     logging.info("API Starting up")
     # user_service = await get_user_service_startup()
     app.state.auth_middleware = Auth0Middleware()
+    load_distribution(DISTRIBUTION_FILE)
     yield
     logging.info("API Shutting down")
 
