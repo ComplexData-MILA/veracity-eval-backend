@@ -251,7 +251,7 @@ class AnalysisOrchestrator:
                             log_data = LogProbsData(tokens=analysis_text, probs=log_probs)
                             current_analysis.log_probs = log_data
 
-                        updated_analysis = await self._analysis_repo.update(current_analysis)
+                        updated_analysis = await self._analysis_repo.update_stream_safe(current_analysis)
 
                         yield {
                             "type": "analysis_complete",
