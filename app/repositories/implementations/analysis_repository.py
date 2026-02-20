@@ -37,11 +37,7 @@ class AnalysisRepository(BaseRepository[AnalysisModel, Analysis]):
     async def update_stream_safe(self, analysis: Analysis) -> Analysis:
         """Update with proper async handling."""
         db_obj = self._to_model(analysis)
-    
-        # 2. Merge the state into the current session
         merged_obj = await self._session.merge(db_obj)
-        
-        # 3. Commit the transaction to release the locks and clear the 'idle in transaction'
         await self._session.commit()
         self._session.expunge(merged_obj)
         
