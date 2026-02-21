@@ -260,7 +260,7 @@ async def get_together_orchestrator_service(
     message_repository: MessageRepository = Depends(get_message_repository),
     source_repository: SourceRepository = Depends(get_source_repository),
     search_repository: SearchRepository = Depends(get_search_repository),
-    web_search_service: WebSearchServiceInterface = Depends(get_web_search_service),
+    web_search_service: WebSearchServiceInterface = Depends(get_serper_web_search_service),
     llm_provider=Depends(get_together_llm_provider),
 ) -> AnalysisOrchestrator:
     llm_provider = TogetherAIProvider(settings)
