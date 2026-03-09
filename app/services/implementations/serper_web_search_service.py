@@ -64,7 +64,7 @@ class SerperWebSearchService(WebSearchServiceInterface):
                             logger.error(f"Error processing search result: {str(e)}", exc_info=True)
                             continue
             await self.source_repository._session.commit()
-            
+
             return sources
 
         except Exception as e:
