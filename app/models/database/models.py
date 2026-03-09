@@ -145,7 +145,7 @@ class AnalysisModel(Base):
 
     log_probs: Mapped[bytes] = mapped_column(LargeBinary, nullable=True)
 
-    claim: Mapped["ClaimModel"] = relationship(back_populates="analyses", doc="Related claim")
+    claim: Mapped["ClaimModel"] = relationship(back_populates="analyses", doc="Related claim", lazy="selectin")
     searches: Mapped[List["SearchModel"]] = relationship(back_populates="analysis", cascade="all, delete-orphan")
     feedbacks: Mapped[List["FeedbackModel"]] = relationship(
         back_populates="analysis",

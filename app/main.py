@@ -63,6 +63,7 @@ app.add_middleware(
         "https://veracity-eval-frontend-git-g2frontend-complex-data-lab.vercel.app",
         "https://veracity-eval-frontend-git-g1frontendmod-complex-data-lab.vercel.app",
         "https://veracity-eval-frontend-git-g1frontendmod2-complex-data-lab.vercel.app",
+        "https://veracity-eval-frontend-git-g0frontendmod-complex-data-lab.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],

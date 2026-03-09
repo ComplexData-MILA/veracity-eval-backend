@@ -374,6 +374,12 @@ resource "kubernetes_service" "misinformation_mitigation_api" {
   metadata {
     name      = "misinformation-mitigation-api"
     namespace = kubernetes_namespace.misinformation_mitigation.metadata[0].name
+
+    annotations = {
+      "cloud.google.com/backend-config" = jsonencode({
+        "default" = "api-timeout-config"
+      })
+    }
   }
 
   spec {
@@ -391,6 +397,20 @@ resource "kubernetes_service" "misinformation_mitigation_api" {
 
 
 # Load Balancer and DNS
+resource "kubernetes_manifest" "api_backend_config" {
+  manifest = {
+    apiVersion = "cloud.google.com/v1"
+    kind       = "BackendConfig"
+    metadata = {
+      name      = "api-timeout-config"
+      namespace = kubernetes_namespace.misinformation_mitigation.metadata[0].name
+    }
+    spec = {
+      timeoutSec = 600  # 600 seconds = 10 minutes
+    }
+  }
+}
+
 resource "google_compute_global_address" "misinformation_mitigation_api_ip" {
   name = "misinformation-mitigation-api-ip"
 }

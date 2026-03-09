@@ -1,4 +1,5 @@
 import json
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from typing import List
 from uuid import UUID
@@ -112,24 +113,95 @@ async def stream_claim_analysis_exp(
         claim = await claim_service.get_claim(claim_id=claim_id, user_id=current_user.id)
 
         session = claim_service._claim_repo._session
+        
+        await session.rollback()
 
         async def event_generator():
             try:
                 logger.info(f"Starting analysis stream for claim {claim_id}")
                 yield f"data: {json.dumps({'type': 'status', 'content': 'Initializing analysis...'})}\n\n"
 
-                async for event in analysis_orchestrator.analyze_claim_stream(
+                orchestrator_stream = analysis_orchestrator.analyze_claim_stream(
                     claim=claim, user_id=current_user.id, default=False
-                ):
-                    if isinstance(event, dict):
-                        yield f"data: {json.dumps(event)}\n\n"
+                )
+                # ---------------------------------------------------------
+                # THE HEALTH CHECK LOOP
+                # ---------------------------------------------------------
+                next_event_task = None
+                
+                while True:
+                    # Only create a new task if we don't already have one waiting
+                    if next_event_task is None:
+                        next_event_task = asyncio.create_task(anext(orchestrator_stream))
+
+                    # Wait for the task to finish, but only wait 15 seconds
+                    done, pending = await asyncio.wait(
+                        [next_event_task], 
+                        timeout=15.0, 
+                        return_when=asyncio.FIRST_COMPLETED
+                    )
+                    
+                    if next_event_task in done:
+                        # The LLM yielded a chunk! Let's process it.
+                        try:
+                            event = next_event_task.result()
+                            if isinstance(event, dict):
+                                yield f"data: {json.dumps(event)}\n\n"
+                                
+                            # Reset the task so we grab the next chunk on the next loop
+                            next_event_task = None 
+                            
+                        except StopAsyncIteration:
+                            # The stream finished normally!
+                            break
+                        except Exception as e:
+                            # If the orchestrator crashed, catch it here
+                            raise e
+                            
+                    else:
+                        # The task is in 'pending'. 15 seconds passed, but the LLM is still thinking.
+                        # We yield a heartbeat, but we DO NOT reset next_event_task. 
+                        # It will keep running safely in the background on the next loop!
+                        logger.debug("Stream idle for 15s. Sending health check ping...")
+                        yield ": healthcheck\n\n"
+                        
+                yield "data: [DONE]\n\n"
+
+            except asyncio.CancelledError:
+                logger.warning(f"Client disconnected during stream for claim {claim_id}")
+                raise
+                
+            # async for event in analysis_orchestrator.analyze_claim_stream(
+                #     claim=claim, user_id=current_user.id, default=False
+                # ):
+                #     if isinstance(event, dict):
+                #         yield f"data: {json.dumps(event)}\n\n"
+
+                # yield "data: [DONE]\n\n"
+
+            # except asyncio.CancelledError:
+            #     # THE FIX: The user closed their browser! 
+            #     logger.info(f"Client disconnected during stream for claim {claim_id}")
+            #     await session.rollback()  # Explicitly release the lock!
+            #     raise
 
             except Exception as e:
                 logger.error(f"Error in analysis stream: {str(e)}", exc_info=True)
                 yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
             finally:
-                await session.close()
-                yield "data: [DONE]\n\n"
+                # async def force_cleanup():
+                #     try:
+                #         await session.rollback()
+                #     except Exception as e:
+                #         logger.error(f"Force rollback failed: {e}")
+                #     finally:
+                #         await session.close()
+                
+                # # Fire and forget. FastAPI cannot cancel this!
+                # asyncio.create_task(force_cleanup())
+                if next_event_task and not next_event_task.done():
+                    logger.debug("Cancelling background orchestrator task...")
+                    next_event_task.cancel()
 
         return StreamingResponse(
             event_generator(),
@@ -138,8 +210,8 @@ async def stream_claim_analysis_exp(
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Credentials": "true",
+                # "Access-Control-Allow-Origin": "*",
+                # "Access-Control-Allow-Credentials": "true",
             },
         )
     except Exception as e:

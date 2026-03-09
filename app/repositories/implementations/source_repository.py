@@ -43,10 +43,19 @@ class SourceRepository(BaseRepository[SourceModel, Source]):
         """Create a source with its domain relationship."""
         try:
             self._session.add(source)
-            await self._session.flush()
-            await self._session.refresh(source, ["domain"])
             await self._session.commit()
-            return source
+            
+            # --- THE FIX ---
+            # Re-fetch to guarantee it is fully loaded and not expired by the commit
+            stmt = select(self._model_class).where(self._model_class.id == source.id).options(selectinload(self._model_class.domain))
+            result = await self._session.execute(stmt)
+            loaded_source = result.scalar_one()
+            
+            self._session.expunge(loaded_source)
+            if loaded_source.domain:
+                self._session.expunge(loaded_source.domain)
+                
+            return loaded_source
         except Exception as e:
             await self._session.rollback()
             raise e
@@ -56,7 +65,18 @@ class SourceRepository(BaseRepository[SourceModel, Source]):
         try:
             merged = await self._session.merge(source)
             await self._session.commit()
-            return merged
+            
+            # --- THE FIX ---
+            # Same treatment: refetch eagerly, then detach
+            stmt = select(self._model_class).where(self._model_class.id == merged.id).options(selectinload(self._model_class.domain))
+            result = await self._session.execute(stmt)
+            loaded_source = result.scalar_one()
+            
+            self._session.expunge(loaded_source)
+            if loaded_source.domain:
+                self._session.expunge(loaded_source.domain)
+                
+            return loaded_source
         except Exception as e:
             await self._session.rollback()
             raise e

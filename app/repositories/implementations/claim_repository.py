@@ -76,6 +76,9 @@ class ClaimRepository(BaseRepository[ClaimModel, Claim], ClaimRepositoryInterfac
 
             claim.status = status
             updated_claim = await self.update(claim)
+
+            await self._session.commit()
+
             return updated_claim
 
         except Exception:

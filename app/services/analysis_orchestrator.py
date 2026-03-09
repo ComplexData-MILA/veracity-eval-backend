@@ -104,12 +104,16 @@ class AnalysisOrchestrator:
             )
             current_analysis = await self._analysis_repo.create(initial_analysis)
 
+            await self._analysis_repo._session.commit()
+
             yield {"type": "status", "content": "Searching for relevant sources..."}
 
             query = self._query_initial(claim_text, language)
             messages = [LLMMessage(role="user", content=query)]
             all_sources = []
             for turns in range(MAX_NUM_TURNS):
+
+                await self._analysis_repo._session.rollback()
 
                 response = await self._llm.generate_response(messages)
 
@@ -134,11 +138,16 @@ class AnalysisOrchestrator:
                         updated_at=datetime.now(UTC),
                     )
                     current_search = await self._search_repo.create(initial_search)
+
+                    await self._search_repo._session.commit()
+
                     sources = await self._web_search.search_and_create_sources(
                         claim_text=search_request_match.matched_content, search_id=current_search.id, language=language
                     )
 
                     all_sources += sources
+
+                    await self._analysis_repo._session.rollback()
 
                     search_response = self._web_search.format_sources_for_prompt(sources, language)
 
@@ -196,6 +205,8 @@ class AnalysisOrchestrator:
             analysis_text = []
             log_probs = []
 
+            await self._analysis_repo._session.rollback()
+
             async for chunk in self._llm.generate_stream(messages):
                 if not chunk.is_complete:
                     analysis_text.append(chunk.text)
@@ -243,6 +254,8 @@ class AnalysisOrchestrator:
                         current_analysis.updated_at = datetime.now(UTC)
 
                         if not default:
+
+                            await self._analysis_repo._session.rollback()
 
                             con_score = await self._generate_logprob_confidence_score(log_probs=log_probs)
                             logger.info(con_score)
@@ -515,6 +528,7 @@ class AnalysisOrchestrator:
             self._analysis_state.current_claim = claim
 
             await self._claim_repo.update_status(claim.id, ClaimStatus.analyzing)
+
             yield {"type": "status", "content": "Starting analysis..."}
 
             # Generate analysis
