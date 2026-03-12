@@ -31,7 +31,7 @@ def upgrade() -> None:
         """
     )
 
-    #The change makes the migration safe by preventing inserts into social_media_clients unless the referenced user already exists in users.
+    # The change makes the migration safe by preventing inserts into social_media_clients unless the referenced user already exists in users.
 
     # New: only insert BlueSky client if the matching user already exists
     op.execute(
