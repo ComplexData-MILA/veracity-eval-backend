@@ -14,7 +14,7 @@ services:
     depends_on:
       misinformation_mitigation_db:
         condition: service_healthy
-    command: [ "/app/docker-entrypoint.sh" ]
+    command: ["sh","/app/docker-entrypoint.sh" ]
 
   misinformation_mitigation_db:
     container_name: misinformation_mitigation_db
