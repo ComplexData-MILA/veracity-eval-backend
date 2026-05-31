@@ -7,3 +7,14 @@ __pycache__/
 .idea/
 .vscode/
 *.log
+
+hf_cache
+.venv
+.git
+__pycache__
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+infrastructure/terraform/.terraform
+*.tfstate
+*.tfstate.*

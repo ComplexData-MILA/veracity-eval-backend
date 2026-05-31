@@ -17,3 +17,4 @@ service-account.json
 get-pip.py
 .DS_Store
 hf_cache/
+infrastructure/deploy.ps1
