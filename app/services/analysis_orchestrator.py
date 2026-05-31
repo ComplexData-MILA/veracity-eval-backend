@@ -7,33 +7,26 @@ from datetime import UTC, datetime
 from typing import Any, AsyncGenerator, Dict, List, NamedTuple, Optional
 from uuid import UUID, uuid4
 
-from app.core.exceptions import (NotAuthorizedException, NotFoundException,
-                                 ValidationError)
+from app.core.exceptions import NotAuthorizedException, NotFoundException, ValidationError
 from app.core.llm.interfaces import LLMProvider
 from app.core.llm.messages import Message as LLMMessage
 from app.core.llm.prompts import AnalysisPrompt
 from app.core.text_safety import clean_unicode_text, parse_analysis_response
-from app.models.database.models import (AnalysisStatus, ClaimStatus,
-                                        ConversationStatus, MessageSenderType)
+from app.models.database.models import AnalysisStatus, ClaimStatus, ConversationStatus, MessageSenderType
 from app.models.domain.analysis import Analysis, LogProbsData
 from app.models.domain.claim import Claim
 from app.models.domain.claim_conversation import ClaimConversation
 from app.models.domain.conversation import Conversation
 from app.models.domain.message import Message
 from app.models.domain.search import Search
-from app.repositories.implementations.analysis_repository import \
-    AnalysisRepository
-from app.repositories.implementations.claim_conversation_repository import \
-    ClaimConversationRepository
+from app.repositories.implementations.analysis_repository import AnalysisRepository
+from app.repositories.implementations.claim_conversation_repository import ClaimConversationRepository
 from app.repositories.implementations.claim_repository import ClaimRepository
-from app.repositories.implementations.conversation_repository import \
-    ConversationRepository
-from app.repositories.implementations.message_repository import \
-    MessageRepository
+from app.repositories.implementations.conversation_repository import ConversationRepository
+from app.repositories.implementations.message_repository import MessageRepository
 from app.repositories.implementations.search_repository import SearchRepository
 from app.repositories.implementations.source_repository import SourceRepository
-from app.services.interfaces.web_search_service import \
-    WebSearchServiceInterface
+from app.services.interfaces.web_search_service import WebSearchServiceInterface
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +221,7 @@ class AnalysisOrchestrator:
                         # OLD VERSION KEPT FOR REFERENCE:
                         # Clean the text before parsing
                         # fmt: off
-                        #cleaned_text = (
+                        # cleaned_text = (
                         #    full_text.strip()
                         #    .replace("\r", "")  # Remove carriage returns
                         #    .replace("\x00", "")  # Remove null bytes
@@ -236,30 +229,30 @@ class AnalysisOrchestrator:
                         #    .replace("\n", "")
                         #    .replace("\\\'", "'")
                         #    .replace("\t", "")
-                        #)
+                        # )
                         # fmt: on
                         # Try to find the JSON object if there's additional text
-                        #try:
+                        # try:
                         #    start_idx = cleaned_text.find("{")
                         #    end_idx = cleaned_text.rindex("}") + 1
                         #    if start_idx != -1 and end_idx != -1:
                         #        cleaned_text = cleaned_text[start_idx:end_idx]
-                        #except ValueError:
-                        #pass
+                        # except ValueError:
+                        # pass
 
-                        #response_data = json.loads(cleaned_text)
+                        # response_data = json.loads(cleaned_text)
 
-                        #logger.debug(response_data)
+                        # logger.debug(response_data)
 
-                        #veracity_score = int(response_data.get("veracity_score", 0))
-                        #analysis_content = str(response_data.get("analysis", "No analysis provided"))
+                        # veracity_score = int(response_data.get("veracity_score", 0))
+                        # analysis_content = str(response_data.get("analysis", "No analysis provided"))
 
-                        #veracity_score = max(0, min(100, veracity_score))
+                        # veracity_score = max(0, min(100, veracity_score))
                         veracity_score, analysis_content = parse_analysis_response(full_text)
 
                         current_analysis.veracity_score = float(veracity_score) / 100
-                        #current_analysis.analysis_text = analysis_content
-                        
+                        # current_analysis.analysis_text = analysis_content
+
                         current_analysis.analysis_text = clean_unicode_text(analysis_content)
                         current_analysis.status = AnalysisStatus.completed.value
                         current_analysis.updated_at = datetime.now(UTC)
@@ -325,19 +318,19 @@ class AnalysisOrchestrator:
                             yield {"type": "error", "content": f"Error parsing analysis response: {str(e)}"}
                             raise
 
-                    #except Exception as e:
+                    # except Exception as e:
                     #    logger.error(f"Error processing analysis: {str(e)}")
                     #    current_analysis.status = AnalysisStatus.failed.value
                     #    await self._analysis_repo.update(current_analysis)
                     #    yield {"type": "error", "content": f"Error creating analysis: {str(e)}"}
                     #    raise
-                    
+
                     except Exception as e:
                         logger.error(
-                        "Error processing analysis response: %s\nFull text: %r",
-                        str(e),
-                        full_text[:2000],
-                        exc_info=True,
+                            "Error processing analysis response: %s\nFull text: %r",
+                            str(e),
+                            full_text[:2000],
+                            exc_info=True,
                         )
 
                         current_analysis.status = AnalysisStatus.failed.value

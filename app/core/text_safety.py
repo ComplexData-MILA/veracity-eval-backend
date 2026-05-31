@@ -47,8 +47,7 @@ def parse_analysis_response(raw_text: str) -> tuple[int, str]:
 
     except (json.JSONDecodeError, TypeError, ValueError) as e:
         logger.warning(
-            "Malformed analysis JSON from LLM. Falling back to regex extraction. "
-            "Error=%s Raw=%r",
+            "Malformed analysis JSON from LLM. Falling back to regex extraction. " "Error=%s Raw=%r",
             e,
             raw_text[:2000],
         )
