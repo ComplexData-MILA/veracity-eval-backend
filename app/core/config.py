@@ -1,8 +1,9 @@
-import os
-from typing import Optional
-from pydantic_settings import BaseSettings  # type: ignore
-from functools import lru_cache
 import logging
+import os
+from functools import lru_cache
+from typing import Optional
+
+from pydantic_settings import BaseSettings  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,10 @@ class Settings(BaseSettings):
     AUTH0_ISSUER: str = "https://veri-fact.ca.auth0.com/"
 
     DEBUG: bool = False
+
+    # For OpenFake
+    OPENFAKE_API_URL: str = "https://complexdatalab-openfakedemo.hf.space/api/predict"
+    MEDIA_VERIFICATION_ENABLED: bool = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
