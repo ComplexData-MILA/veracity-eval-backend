@@ -45,6 +45,8 @@ class AnalysisPrompt:
         "2. Ensure all special characters in the analysis text are properly escaped\n"
         "3. The analysis field should be a single line with newlines represented as \\n\n"
         "4. Do not include any control characters\n"
+    Before responding, check that your answer is valid JSON and matches this exact structure:
+    {"veracity_score":NUMBER,"analysis":"TEXT"}
 
     """
 
@@ -62,6 +64,8 @@ class AnalysisPrompt:
         "2. Ensure all special characters in the analysis text are properly escaped\n"
         "3. The analysis field should be a single line with newlines represented as \\n\n"
         "4. Do not include any control characters\n"
+    Before responding, check that your answer is valid JSON and matches this exact structure:
+    {"veracity_score":NUMBER,"analysis":"TEXT"}
 
     """
 
@@ -82,7 +86,8 @@ class AnalysisPrompt:
         "2. Assurez-vous que tous les caractères spéciaux dans le texte d'analyse sont correctement retranscrits\n"
         "3. Le champ "analysis" doit être une seule ligne avec des nouvelles lignes représentées par \\n\n"
         "4. N'ajoutez aucune entité de caractère\n"
-
+    Avant de répondre, vérifie que ta réponse est un JSON valide et qu’elle respecte exactement cette structure :
+    {"veracity_score":NUMBER,"analysis":"TEXT"}
     """
 
     GET_CONFIDENCE = """
