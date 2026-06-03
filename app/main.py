@@ -1,15 +1,16 @@
-from contextlib import asynccontextmanager
-from pathlib import Path
-from fastapi import FastAPI
-from app.api.router import router
-from fastapi.middleware.cors import CORSMiddleware
-from app.core.auth.auth0_middleware import Auth0Middleware
-from app.core.scoring import load_distribution
-
 # from app.services.user_service import UserService
 # from app.repositories.implementations.user_repository import UserRepository
 # from app.db.session import AsyncSessionLocal
 import logging
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.router import router
+from app.core.auth.auth0_middleware import Auth0Middleware
+from app.core.scoring import load_distribution
 
 formatter = logging.Formatter(fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
@@ -64,6 +65,7 @@ app.add_middleware(
         "https://veracity-eval-frontend-git-g1frontendmod-complex-data-lab.vercel.app",
         "https://veracity-eval-frontend-git-g1frontendmod2-complex-data-lab.vercel.app",
         "https://veracity-eval-frontend-git-g0frontendmod-complex-data-lab.vercel.app",
+        "https://veracity-eval-frontend-git-feature-open-f37c90-complex-data-lab.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
