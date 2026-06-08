@@ -268,7 +268,11 @@ async def vary_assert(
     """Get average reliability score for claims by language."""
     try:
         analysis = await analysis_orchestrator.vary_analysis_assertiveness(analysis_id=analysis_id)
-        return AnalysisRead.model_validate(analysis)
+        raw_score = analysis.confidence_score
+        percentile = (get_percentile(raw_score)) / 100.0
+        analysis = AnalysisRead.model_validate(analysis)
+        analysis.confidence_percentile = percentile
+        return analysis
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get alter assertivity : {str(e)}"
