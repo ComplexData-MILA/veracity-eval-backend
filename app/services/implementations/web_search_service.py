@@ -49,7 +49,10 @@ class GoogleWebSearchService(WebSearchServiceInterface):
 
     def _has_acceptable_credibility(self, credibility_score: Optional[float]) -> bool:
         # This removes both unknown credibility and explicit 0 credibility.
-        return credibility_score is not None and credibility_score > 0
+        # return credibility_score is not None and credibility_score > 0
+        # Block explicit 0 credibility, but allow unscored domains for now.
+        # This avoids dropping credible sources just because they are missing from our domain DB.
+        return credibility_score is None or credibility_score > 0
 
     def _is_allowed_source(self, source: SourceModel) -> bool:
         domain_name = (
@@ -132,11 +135,11 @@ class GoogleWebSearchService(WebSearchServiceInterface):
                                 logger.info(f"Created new domain record for: {domain_name}")
                             if not self._has_acceptable_credibility(domain.credibility_score):
                                 logger.info(
-                                    f"Skipping source with low/unknown credibility: "
+                                    f"Skipping source with zero credibility: "
                                     f"{domain_name} ({domain.credibility_score})"
                                 )
                                 continue
-
+                            logger.info(f"Allowing source: {domain_name} " f"(credibility={domain.credibility_score})")
                             source = await self._create_new_source(
                                 item,
                                 search_id,
