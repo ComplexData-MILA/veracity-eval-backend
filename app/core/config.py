@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # For OpenFake
-    OPENFAKE_API_URL: str = "https://complexdatalab-openfakedemo.hf.space/api/predict"
+    OPENFAKE_API_URL: str = "https://deepfake-detector.ai4.institute/api/predict"
     MEDIA_VERIFICATION_ENABLED: bool = True
 
     def __init__(self, **kwargs):
