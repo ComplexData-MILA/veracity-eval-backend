@@ -1,45 +1,66 @@
-from datetime import datetime, UTC
+import asyncio
+import json
+import logging
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from typing import List, Optional, Tuple
 from uuid import UUID, uuid4
-from wordcloud import WordCloud, STOPWORDS
-import json
-import plotly.graph_objects as go
-import logging
-
-from sklearn.manifold import TSNE
-from sklearn.cluster import KMeans
-import plotly.express as px
-import pandas as pd
-import numpy as np
-
-from app.models.database.models import ClaimStatus
-from app.models.domain.claim import Claim
-from app.repositories.implementations.claim_repository import ClaimRepository
-from app.repositories.implementations.analysis_repository import AnalysisRepository
-from app.services.analysis_orchestrator import AnalysisOrchestrator
-from app.core.exceptions import MonthlyLimitExceededError
-
-from app.core.exceptions import NotFoundException, NotAuthorizedException
-
-from nltk.corpus import stopwords
 
 import nltk
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from nltk.corpus import stopwords
+from sklearn.cluster import KMeans
+from sklearn.manifold import TSNE
+from wordcloud import STOPWORDS, WordCloud
+
+from app.core.exceptions import MonthlyLimitExceededError, NotAuthorizedException, NotFoundException
+from app.models.database.models import ClaimStatus
+from app.models.domain.claim import Claim
+from app.repositories.implementations.analysis_repository import AnalysisRepository
+from app.repositories.implementations.claim_repository import ClaimRepository
+from app.services.analysis_orchestrator import AnalysisOrchestrator
 
 nltk.download("stopwords")
 
 logger = logging.getLogger(__name__)
 executor = ThreadPoolExecutor(max_workers=1)
 
-RESTRICTED_CLIENT_ID = "hHRhJr5OoJhWumP87MHk5RldejycVAmC@clients"
-MONTHLY_LIMIT = 3000
+MEO_ACCESS_AUTH0_ID = "hHRhJr5OoJhWumP87MHk5RldejycVAmC@clients"
+
+# For an Auth0 M2M token, this will normally be:
+# <new-client-id>@clients
+COVIDFACT_EVALUATION_AUTH0_ID = "XhxhXyQqVlwCo8Rrg6mbqChGyaOeqdv1@clients"
+
+CLIENT_MONTHLY_LIMITS = {
+    MEO_ACCESS_AUTH0_ID: 3000,
+    COVIDFACT_EVALUATION_AUTH0_ID: 5000,
+}
 
 
 class ClaimService:
     def __init__(self, claim_repository: ClaimRepository, analysis_repository: AnalysisRepository):
         self._claim_repo = claim_repository
         self._analysis_repo = analysis_repository
+
+    async def _enforce_monthly_limit(
+        self,
+        user_id: UUID,
+        auth0_id: Optional[str],
+        requested_claims: int,
+    ) -> None:
+        limit = CLIENT_MONTHLY_LIMITS.get(auth0_id)
+
+        if limit is None:
+            return
+
+        current_count = await self._claim_repo.get_monthly_claim_count(user_id)
+
+        # Allows exactly the approved quota.
+        if current_count + requested_claims > limit:
+            raise MonthlyLimitExceededError()
 
     async def create_claim(
         self,
@@ -54,12 +75,11 @@ class ClaimService:
         """Create a new claim."""
         now = datetime.now(UTC)
 
-        if auth0_id is not None:
-            if auth0_id == RESTRICTED_CLIENT_ID:
-                current_count = await self._claim_repo.get_monthly_claim_count(user_id)
-
-                if current_count >= MONTHLY_LIMIT:
-                    raise MonthlyLimitExceededError()
+        await self._enforce_monthly_limit(
+            user_id=user_id,
+            auth0_id=auth0_id,
+            requested_claims=1,
+        )
         claim = Claim(
             id=uuid4(),
             user_id=user_id,
@@ -254,12 +274,11 @@ class ClaimService:
     ) -> List[Claim]:
         # Map ClaimCreate + user_id → Claim DB objects
         now = datetime.now(UTC)
-        if auth0_id is not None:
-            if auth0_id == RESTRICTED_CLIENT_ID:
-                current_count = await self._claim_repo.get_monthly_claim_count(user_id)
-
-                if current_count + len(claims) >= MONTHLY_LIMIT:
-                    raise MonthlyLimitExceededError()
+        await self._enforce_monthly_limit(
+            user_id=user_id,
+            auth0_id=auth0_id,
+            requested_claims=len(claims),
+        )
         claim_models = [
             Claim(
                 id=uuid4(),
