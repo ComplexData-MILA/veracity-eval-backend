@@ -254,7 +254,12 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
   }
 
   spec {
-    replicas = 1
+    replicas               = 1
+    revision_history_limit = 1
+
+    strategy {
+      type = "Recreate"
+    }
 
     selector {
       match_labels = {
@@ -287,7 +292,7 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
           }
 
           env {
-            name = "TOGETHER_API_KEY"
+            name  = "TOGETHER_API_KEY"
             value = var.together_api_key
           }
 
@@ -402,7 +407,7 @@ resource "kubernetes_manifest" "api_backend_config" {
       namespace = kubernetes_namespace.misinformation_mitigation.metadata[0].name
     }
     spec = {
-      timeoutSec = 600  # 600 seconds = 10 minutes
+      timeoutSec = 600 # 600 seconds = 10 minutes
     }
   }
 }
@@ -628,3 +633,4 @@ variable "auth0_client_id" {
 variable "auth0_client_secret" {
   description = "Auth0 Client Secret"
 }
+
