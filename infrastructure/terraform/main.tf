@@ -267,17 +267,13 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
         labels = {
           app = "misinformation-mitigation-api"
         }
-
-        annotations = {
-          "timestamp" = timestamp() // Force redeployment
-        }
       }
 
       spec {
         service_account_name = kubernetes_service_account.workload_identity_sa.metadata[0].name
 
         container {
-          image = "gcr.io/${var.project_id}/misinformation-mitigation-api:latest"
+          image = var.image_uri
           name  = "misinformation-mitigation-api"
 
           env {
@@ -536,7 +532,10 @@ variable "project_id" {
   description = "The project ID to deploy to"
   default     = "misinformation-mitigation"
 }
-
+variable "image_uri" {
+  description = "Exact Docker image deployed to Kubernetes"
+  type        = string
+}
 variable "region" {
   description = "The region to deploy to"
   default     = "northamerica-northeast1"
