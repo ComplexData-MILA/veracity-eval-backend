@@ -1,20 +1,21 @@
-from typing import Optional
-from uuid import uuid4
-import aiohttp
-from fastapi import HTTPException, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import ExpiredSignatureError, jwt
 import json
 import logging
 from datetime import UTC, datetime
+from typing import Optional
+from uuid import uuid4
+
+import aiohttp
+from fastapi import HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import ExpiredSignatureError, jwt
 
 from app.core.config import get_settings
+from app.db.session import AsyncSessionLocal
+from app.models.domain.user import User
 
 # from app.api.dependencies import get_db
 from app.repositories.implementations.user_repository import UserRepository
 from app.services.user_service import UserService
-from app.models.domain.user import User
-from app.db.session import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -76,8 +77,9 @@ class Auth0Middleware:
                 raise HTTPException(status_code=500, detail="Authentication service unavailable")
         return self.jwks
 
+    """
     async def _verify_token(self, token: str) -> dict:
-        """Verify JWT token and return payload."""
+
         try:
             unverified_header = jwt.get_unverified_header(token)
             logger.debug(f"Unverified token header: {json.dumps(unverified_header, indent=2)}")
@@ -94,7 +96,7 @@ class Auth0Middleware:
                 raise HTTPException(status_code=401, detail="Invalid token key")
 
             payload = jwt.decode(token, rsa_key, algorithms=self.algorithms, audience=self.audience, issuer=self.issuer)
-            logger.debug(f"Decoded token payload: {json.dumps(payload, indent=2)}")
+            logger.debug("Decoded token claim names: %s", sorted(payload.keys()))
             return payload
 
         except ExpiredSignatureError:
@@ -102,6 +104,63 @@ class Auth0Middleware:
         except Exception as e:
             logger.error(f"Token verification error: {str(e)}")
             raise HTTPException(status_code=401, detail="Invalid token")
+    """
+
+    async def _verify_token(self, token: str) -> dict:
+        """Verify JWT token locally and return its claims."""
+        try:
+            unverified_header = jwt.get_unverified_header(token)
+            kid = unverified_header.get("kid")
+
+            if not kid:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Token is missing a key identifier",
+                )
+
+            jwks = await self._get_jwks()
+            rsa_key = next(
+                (key for key in jwks.get("keys", []) if key.get("kid") == kid),
+                None,
+            )
+
+            if not rsa_key:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Invalid token key",
+                )
+
+            payload = jwt.decode(
+                token,
+                rsa_key,
+                algorithms=self.algorithms,
+                audience=self.audience,
+                issuer=self.issuer,
+            )
+
+            # Log field names only, without personal values.
+            logger.debug(
+                "Decoded token claim names: %s",
+                sorted(payload.keys()),
+            )
+
+            return payload
+
+        except ExpiredSignatureError as exc:
+            raise HTTPException(
+                status_code=401,
+                detail="Token has expired",
+            ) from exc
+
+        except HTTPException:
+            raise
+
+        except Exception:
+            logger.exception("Token verification failed")
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token",
+            )
 
     async def _fetch_user_info(self, access_token: str) -> dict:
         """Fetch additional user info from Auth0."""
@@ -127,8 +186,9 @@ class Auth0Middleware:
             return email.split("@")[0]
         return f"user_{uuid4().hex[:8]}"
 
+    """
     async def authenticate_request(self, request: Request) -> User:
-        """Authenticate a request and return the user."""
+
         try:
             credentials = await self.security(request)
             if not credentials:
@@ -141,6 +201,34 @@ class Auth0Middleware:
         except Exception as e:
             logger.error(f"Authentication error: {str(e)}")
             raise HTTPException(status_code=401, detail="Authentication failed")
+    """
+
+    async def authenticate_request(self, request: Request) -> User:
+        """Authenticate a request and return the user."""
+        try:
+            credentials = await self.security(request)
+            if not credentials:
+                raise HTTPException(
+                    status_code=401,
+                    detail="No valid authentication credentials found",
+                )
+
+            token = credentials.credentials
+
+            # Verify the token locally using the cached Auth0 JWKS.
+            payload = await self._verify_token(token)
+
+            # Do not call Auth0 /userinfo for every API request.
+            return await self._get_or_create_user(payload)
+
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception("Unexpected authentication error")
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication failed",
+            )
 
     async def _get_or_create_user(self, user_data: dict) -> User:
         """Get existing user or create new one."""
