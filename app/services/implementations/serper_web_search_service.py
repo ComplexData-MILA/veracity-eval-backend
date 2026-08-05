@@ -2,7 +2,7 @@ import logging
 from datetime import UTC, datetime
 from typing import List, Optional
 from uuid import UUID, uuid4
-
+import trafilatura
 import aiohttp
 from sqlalchemy.exc import IntegrityError
 
@@ -134,8 +134,15 @@ class SerperWebSearchService(WebSearchServiceInterface):
         return await self.source_repository.update(source)
 
     async def _create_new_source(
-        self, item: dict, search_id: UUID, domain_id: UUID, credibility_score: float
+        self, item: dict, search_id: UUID, domain_id: UUID, credibility_score: float, get_content: bool, 
     ) -> Optional[SourceModel]:
+        full_content = None
+        try:
+            if get_content:
+                downloaded = trafilatura.fetch_url(item["link"])
+                full_content = trafilatura.extract(downloaded)
+        except:
+            pass
         try:
             source = SourceModel(
                 id=uuid4(),
@@ -144,7 +151,7 @@ class SerperWebSearchService(WebSearchServiceInterface):
                 title=item.get("title", "Untitled"),
                 snippet=item.get("snippet", ""),
                 domain_id=domain_id,
-                content=None,
+                content=full_content,
                 credibility_score=credibility_score,
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC),
