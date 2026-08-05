@@ -142,7 +142,7 @@ class SerperWebSearchService(WebSearchServiceInterface):
                 downloaded = trafilatura.fetch_url(item["link"])
                 full_content = trafilatura.extract(downloaded)
         except Exception as e:
-            logging.exception("An error occurred while fetching content from {}.".format(item["link"]))
+            logging.error("An error occurred while fetching content from {}, full error syntax is: {}.".format(item["link"], e))
         try:
             source = SourceModel(
                 id=uuid4(),
