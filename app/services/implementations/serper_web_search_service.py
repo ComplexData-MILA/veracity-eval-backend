@@ -67,7 +67,8 @@ class SerperWebSearchService(WebSearchServiceInterface):
         """Search for sources and create or update records."""
         try:
             logger.warning("SERPER SOURCE FILTER CODE IS RUNNING")
-            payload = {"q": claim_text, "location": "Canada", "gl": "ca"}
+            payload = {"q": " I will provide you with a claim. Prioritize primary Canadian authoritative sources to address this claim. Claim: " + claim_text,
+                       "location": "Canada", "gl": "ca"}
             if language == "french":
                 payload["hl"] = "fr"
 
