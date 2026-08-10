@@ -135,7 +135,7 @@ class SerperWebSearchService(WebSearchServiceInterface):
         return await self.source_repository.update(source)
 
     async def _create_new_source(
-        self, item: dict, search_id: UUID, domain_id: UUID, credibility_score: float, get_content: bool = True, remove_noise: bool = False,
+        self, item: dict, search_id: UUID, domain_id: UUID, credibility_score: float, get_content: bool = True, remove_noise: bool = True,
     ) -> Optional[SourceModel]:
         full_content = None
         try:
