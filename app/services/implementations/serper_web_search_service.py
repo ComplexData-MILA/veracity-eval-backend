@@ -135,13 +135,13 @@ class SerperWebSearchService(WebSearchServiceInterface):
         return await self.source_repository.update(source)
 
     async def _create_new_source(
-        self, item: dict, search_id: UUID, domain_id: UUID, credibility_score: float, get_content: bool = True, 
+        self, item: dict, search_id: UUID, domain_id: UUID, credibility_score: float, get_content: bool = True, remove_noise: bool = False,
     ) -> Optional[SourceModel]:
         full_content = None
         try:
             if get_content:
                 downloaded = trafilatura.fetch_url(item["link"])
-                full_content = trafilatura.extract(downloaded)
+                full_content = trafilatura.extract(downloaded, favor_precision = remove_noise)
         except Exception as e:
             logging.error("An error occurred while fetching content from {}, full error syntax is: {}.".format(item["link"], e))
         try:
