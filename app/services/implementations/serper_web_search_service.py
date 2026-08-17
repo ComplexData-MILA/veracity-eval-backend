@@ -2,7 +2,7 @@ import logging
 from datetime import UTC, datetime
 from typing import List, Optional
 from uuid import UUID, uuid4
-
+import trafilatura
 import aiohttp
 from sqlalchemy.exc import IntegrityError
 
@@ -67,7 +67,8 @@ class SerperWebSearchService(WebSearchServiceInterface):
         """Search for sources and create or update records."""
         try:
             logger.warning("SERPER SOURCE FILTER CODE IS RUNNING")
-            payload = {"q": claim_text, "location": "Canada", "gl": "ca"}
+            payload = {"q": " I will provide you with a claim. Prioritize primary Canadian authoritative sources to address this claim. Claim: " + claim_text,
+                       "location": "Canada", "gl": "ca"}
             if language == "french":
                 payload["hl"] = "fr"
 
@@ -134,8 +135,15 @@ class SerperWebSearchService(WebSearchServiceInterface):
         return await self.source_repository.update(source)
 
     async def _create_new_source(
-        self, item: dict, search_id: UUID, domain_id: UUID, credibility_score: float
+        self, item: dict, search_id: UUID, domain_id: UUID, credibility_score: float, get_content: bool = True, remove_noise: bool = True,
     ) -> Optional[SourceModel]:
+        full_content = None
+        try:
+            if get_content:
+                downloaded = trafilatura.fetch_url(item["link"])
+                full_content = trafilatura.extract(downloaded, favor_precision = remove_noise, include_formatting=False, include_comments=False, include_links=False)
+        except Exception as e:
+            logging.error("An error occurred while fetching content from {}, full error syntax is: {}.".format(item["link"], e))
         try:
             source = SourceModel(
                 id=uuid4(),
@@ -144,7 +152,7 @@ class SerperWebSearchService(WebSearchServiceInterface):
                 title=item.get("title", "Untitled"),
                 snippet=item.get("snippet", ""),
                 domain_id=domain_id,
-                content=None,
+                content=full_content,
                 credibility_score=credibility_score,
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC),
