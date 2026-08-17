@@ -141,7 +141,7 @@ class SerperWebSearchService(WebSearchServiceInterface):
         try:
             if get_content:
                 downloaded = trafilatura.fetch_url(item["link"])
-                full_content = trafilatura.extract(downloaded, favor_precision = remove_noise)
+                full_content = trafilatura.extract(downloaded, favor_precision = remove_noise, include_formatting=False, include_comments=False, include_links=False)
         except Exception as e:
             logging.error("An error occurred while fetching content from {}, full error syntax is: {}.".format(item["link"], e))
         try:
