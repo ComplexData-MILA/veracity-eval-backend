@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
 from app.core.exceptions import ValidationError
+from app.core.utils.domain_preferences import build_domain_query, matches_preferred_domain
 from app.core.utils.url import normalize_domain_name
 from app.models.database.models import SourceModel
 from app.repositories.implementations.source_repository import SourceRepository
@@ -72,7 +73,14 @@ class SerperWebSearchService(WebSearchServiceInterface):
         """Search for sources and create or update records."""
         try:
             logger.warning("SERPER SOURCE FILTER CODE IS RUNNING")
-            payload = {"q": claim_text, "location": "Canada", "gl": "ca"}
+            payload = {
+                "q": build_domain_query(
+                    claim_text,
+                    preferred_domains,
+                ),
+                "location": "Canada",
+                "gl": "ca",
+            }
             if language == "french":
                 payload["hl"] = "fr"
 
@@ -93,6 +101,11 @@ class SerperWebSearchService(WebSearchServiceInterface):
 
                     for item in data["organic"][:10]:
                         try:
+                            if not matches_preferred_domain(
+                                item["link"],
+                                preferred_domains,
+                            ):
+                                continue
                             domain_name = normalize_domain_name(item["link"])
                             # Blocked platforms are always excluded regardless of credibility score.
                             if self._is_blocked_domain(domain_name):

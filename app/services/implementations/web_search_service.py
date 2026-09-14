@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
 from app.core.exceptions import ValidationError
+from app.core.utils.domain_preferences import build_domain_query, matches_preferred_domain
 from app.core.utils.url import normalize_domain_name
 from app.models.database.models import SourceModel
 from app.repositories.implementations.source_repository import SourceRepository
@@ -106,6 +107,11 @@ class GoogleWebSearchService(WebSearchServiceInterface):
                     "lr": "lang_fr",
                 }
 
+            params["q"] = build_domain_query(
+                claim_text,
+                preferred_domains,
+            )
+
             sources = []
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.search_endpoint, params=params) as response:
@@ -131,6 +137,11 @@ class GoogleWebSearchService(WebSearchServiceInterface):
                             # if source:
                             # sources.append(source)
                             # logger.debug(f"Created new source for URL: {item['link']}")
+                            if not matches_preferred_domain(
+                                item["link"],
+                                preferred_domains,
+                            ):
+                                continue
                             domain_name = normalize_domain_name(item["link"])
                             if self._is_blocked_domain(domain_name):
                                 logger.info(f"Skipping blocked source domain: {domain_name}")

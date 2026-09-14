@@ -60,3 +60,37 @@ def normalize_preferred_domains(
             normalized.append(domain)
 
     return normalized
+
+
+def build_domain_query(
+    query: str,
+    domains: list[str] | None,
+) -> str:
+    if not domains:
+        return query
+
+    restrictions = " OR ".join(f"site:{domain}" for domain in domains)
+    return f"({query}) ({restrictions})"
+
+
+def matches_preferred_domain(
+    url: str,
+    domains: list[str] | None,
+) -> bool:
+    if not domains:
+        return True
+
+    try:
+        parsed = urlsplit(url)
+        if parsed.scheme not in {"http", "https"}:
+            return False
+
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+
+        hostname = hostname.encode("idna").decode("ascii").lower().rstrip(".")
+    except (ValueError, UnicodeError):
+        return False
+
+    return any(hostname == domain or hostname.endswith(f".{domain}") for domain in domains)
