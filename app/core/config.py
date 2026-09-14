@@ -32,6 +32,12 @@ class Settings(BaseSettings):
 
     LLAMA_MODEL_NAME: str = "meta/llama-3.3-70b-instruct-maas"
 
+    # Which provider backs claim extraction: "vertex" | "together"
+    EXTRACTION_LLM_PROVIDER: str = "vertex"
+    # Longest input the extraction step will process; longer text is refused
+    # rather than truncated so the user never confirms an incomplete list.
+    MAX_EXTRACTION_CHARS: int = 8000
+
     AUTH0_DOMAIN: str = "veri-fact.ca.auth0.com"
     AUTH0_AUDIENCE: str = "https://veri-fact.ca.auth0.com/api/v2/"
     AUTH0_CLIENT_ID: str = ""

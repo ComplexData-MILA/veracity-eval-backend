@@ -5,6 +5,7 @@ from typing import AsyncGenerator
 
 
 from app.core.auth.auth0_middleware import Auth0Middleware
+from app.core.llm.interfaces import LLMProvider
 from app.core.llm.vertex_ai_llama import VertexAILlamaProvider
 from app.core.llm.together_ai_llama import TogetherAIProvider
 
@@ -31,6 +32,7 @@ from app.services.interfaces.web_search_service import WebSearchServiceInterface
 from app.services.implementations.embedding_generator import EmbeddingGenerator
 from app.services.interfaces.embedding_generator import EmbeddingGeneratorInterface
 from app.services.user_service import UserService
+from app.services.claim_extraction_service import ClaimExtractionService
 from app.services.claim_service import ClaimService
 from app.services.analysis_service import AnalysisService
 from app.services.message_service import MessageService
@@ -197,6 +199,22 @@ async def get_together_llm_provider():
     except Exception as e:
         logger.error(f"Failed to initialize LLM provider: {str(e)}", exc_info=True)
         raise
+
+
+async def get_extraction_llm_provider() -> LLMProvider:
+    """LLM used for claim extraction. Defaults to the main provider."""
+    if settings.EXTRACTION_LLM_PROVIDER.lower() == "together":
+        return await get_together_llm_provider()
+    return await get_llm_provider()
+
+
+async def get_claim_extraction_service(
+    llm_provider: LLMProvider = Depends(get_extraction_llm_provider),
+) -> ClaimExtractionService:
+    return ClaimExtractionService(
+        llm_provider=llm_provider,
+        max_input_chars=settings.MAX_EXTRACTION_CHARS,
+    )
 
 
 async def get_web_search_service(

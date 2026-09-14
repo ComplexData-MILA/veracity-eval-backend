@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.endpoints import (
     analysis_endpoints,
     claim_conversation_endpoints,
+    claim_extraction_endpoints,
     claim_endpoints,
     conversation_endpoints,
     discussion_endpoints,
@@ -20,6 +21,7 @@ from app.api.endpoints import (
 router = APIRouter()
 
 router.include_router(user_endpoints.router, tags=["users"])
+router.include_router(claim_extraction_endpoints.router, tags=["claims"])
 router.include_router(claim_endpoints.router, tags=["claims"])
 router.include_router(analysis_endpoints.router, tags=["analysis"])
 router.include_router(source_endpoints.router, tags=["sources"])
