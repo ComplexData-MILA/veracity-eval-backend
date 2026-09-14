@@ -1,26 +1,27 @@
-import json
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from typing import List
-from uuid import UUID
+import json
 import logging
 from datetime import datetime
+from typing import List
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import (
     get_analysis_service,
-    get_orchestrator_service,
-    get_current_user,
     get_claim_service,
+    get_current_user,
+    get_orchestrator_service,
     get_together_orchestrator_service,
 )
+from app.core.exceptions import NotFoundException
+from app.core.scoring import get_percentile
 from app.models.domain.user import User
+from app.schemas.analysis_schema import AnalysisRead
+from app.services.analysis_orchestrator import AnalysisOrchestrator
 from app.services.analysis_service import AnalysisService
 from app.services.claim_service import ClaimService
-from app.services.analysis_orchestrator import AnalysisOrchestrator
-from app.schemas.analysis_schema import AnalysisRead
-from app.core.exceptions import NotFoundException
-from fastapi.responses import StreamingResponse
-from app.core.scoring import get_percentile
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 logger = logging.getLogger(__name__)
@@ -104,6 +105,11 @@ async def stream_claim_analysis(
 async def stream_claim_analysis_exp(
     request: Request,
     claim_id: UUID,
+    preferred_domains: List[str]
+    | None = Query(
+        default=None,
+        description="Domains selected by the user for evidence retrieval",
+    ),
     current_user: User = Depends(get_current_user),
     analysis_orchestrator: AnalysisOrchestrator = Depends(get_together_orchestrator_service),
     claim_service: ClaimService = Depends(get_claim_service),
