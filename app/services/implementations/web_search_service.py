@@ -66,7 +66,12 @@ class GoogleWebSearchService(WebSearchServiceInterface):
         return [source for source in sources if self._is_allowed_source(source)]
 
     async def search_and_create_sources(
-        self, claim_text: str, search_id: UUID, num_results: int = 5, language: str = "english"
+        self,
+        claim_text: str,
+        search_id: UUID,
+        num_results: int = 5,
+        language: str = "english",
+        preferred_domains: list[str] | None = None,
     ) -> List[SourceModel]:
         """Search for sources and create or update records."""
         try:

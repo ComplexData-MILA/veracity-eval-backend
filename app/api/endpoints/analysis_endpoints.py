@@ -136,8 +136,14 @@ async def stream_claim_analysis_exp(
                 yield f"data: {json.dumps({'type': 'status', 'content': 'Initializing analysis...'})}\n\n"
 
                 orchestrator_stream = analysis_orchestrator.analyze_claim_stream(
-                    claim=claim, user_id=current_user.id, default=False
+                    claim=claim,
+                    user_id=current_user.id,
+                    preferred_domains=preferred_domains,
                 )
+
+                # orchestrator_stream = analysis_orchestrator.analyze_claim_stream(
+                #   claim=claim, user_id=current_user.id, default=False
+                # )
                 # ---------------------------------------------------------
                 # THE HEALTH CHECK LOOP
                 # ---------------------------------------------------------

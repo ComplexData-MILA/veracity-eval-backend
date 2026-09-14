@@ -1,13 +1,19 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
 from uuid import UUID
+
 from app.models.database.models import SourceModel
 
 
 class WebSearchServiceInterface(ABC):
     @abstractmethod
     async def search_and_create_sources(
-        self, claim_text: str, search_id: UUID, num_results: int = 5, language: str = "english"
+        self,
+        claim_text: str,
+        search_id: UUID,
+        num_results: int = 5,
+        language: str = "english",
+        preferred_domains: list[str] | None = None,
     ) -> List[SourceModel]:
         pass
 

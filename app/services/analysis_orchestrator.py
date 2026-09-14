@@ -88,7 +88,12 @@ class AnalysisOrchestrator:
         self._analysis_state = AnalysisState()
 
     async def _generate_analysis(
-        self, claim_text: str, context: str, language: str, default: bool = True
+        self,
+        claim_text: str,
+        context: str,
+        language: str,
+        default: bool = True,
+        preferred_domains: list[str] | None = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Generate analysis for a claim with web search and source management."""
         try:
@@ -142,7 +147,10 @@ class AnalysisOrchestrator:
                     await self._search_repo._session.commit()
 
                     sources = await self._web_search.search_and_create_sources(
-                        claim_text=search_request_match.matched_content, search_id=current_search.id, language=language
+                        claim_text=search_request_match.matched_content,
+                        search_id=current_search.id,
+                        language=language,
+                        preferred_domains=preferred_domains,
                     )
 
                     all_sources += sources
@@ -539,7 +547,11 @@ class AnalysisOrchestrator:
         return await self._message_repo.create(message)
 
     async def analyze_claim_stream(
-        self, claim: Claim, user_id: UUID, default: bool = True
+        self,
+        claim: Claim,
+        user_id: UUID,
+        default: bool = True,
+        preferred_domains: list[str] | None = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Stream the analysis process for a claim and initialize conversation."""
         try:
@@ -560,7 +572,11 @@ class AnalysisOrchestrator:
             analysis_complete = False
 
             async for chunk in self._generate_analysis(
-                claim.claim_text, claim.context, claim.language, default=default
+                claim.claim_text,
+                claim.context,
+                claim.language,
+                default=default,
+                preferred_domains=preferred_domains,
             ):
                 if chunk["type"] == "analysis_complete":
                     analysis_complete = True
