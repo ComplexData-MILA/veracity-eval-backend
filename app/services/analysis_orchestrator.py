@@ -186,6 +186,27 @@ class AnalysisOrchestrator:
                     or main_agent_message.strip().lower().endswith("prête")
                 ):
                     break
+            if preferred_domains and not all_sources:
+                current_analysis.status = AnalysisStatus.failed.value
+                current_analysis.analysis_text = (
+                    "No usable evidence was retrieved from the selected "
+                    "domains. This does not establish whether the claim "
+                    "is true or false."
+                )
+                current_analysis.updated_at = datetime.now(UTC)
+
+                await self._analysis_repo.update_stream_safe(current_analysis)
+
+                yield {
+                    "type": "insufficient_evidence",
+                    "content": {
+                        "analysis_id": str(current_analysis.id),
+                        "message": current_analysis.analysis_text,
+                        "preferred_domains": preferred_domains,
+                        "can_expand_search": True,
+                    },
+                }
+                return
 
             source_credibility = self._web_search.calculate_overall_credibility(all_sources)
 
