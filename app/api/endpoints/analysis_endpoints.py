@@ -17,6 +17,7 @@ from app.api.dependencies import (
 )
 from app.core.exceptions import NotFoundException
 from app.core.scoring import get_percentile
+from app.core.utils.domain_preferences import normalize_preferred_domains
 from app.models.domain.user import User
 from app.schemas.analysis_schema import AnalysisRead
 from app.services.analysis_orchestrator import AnalysisOrchestrator
@@ -115,6 +116,13 @@ async def stream_claim_analysis_exp(
     claim_service: ClaimService = Depends(get_claim_service),
 ) -> StreamingResponse:
     """Stream the analysis process for a claim in real-time."""
+    try:
+        preferred_domains = normalize_preferred_domains(preferred_domains)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        )
     try:
         claim = await claim_service.get_claim(claim_id=claim_id, user_id=current_user.id)
 
