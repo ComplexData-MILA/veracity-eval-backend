@@ -58,11 +58,20 @@ async def get_analysis(
 async def stream_claim_analysis(
     request: Request,
     claim_id: UUID,
+    preferred_domains: List[str]
+    | None = Query(
+        default=None,
+        description="Domains selected by the user for evidence retrieval",
+    ),
     current_user: User = Depends(get_current_user),
     analysis_orchestrator: AnalysisOrchestrator = Depends(get_orchestrator_service),
     claim_service: ClaimService = Depends(get_claim_service),
 ) -> StreamingResponse:
     """Stream the analysis process for a claim in real-time."""
+    try:
+        preferred_domains = normalize_preferred_domains(preferred_domains)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     try:
         # current_user = await auth_middleware.authenticate_request(request)
 
@@ -75,7 +84,11 @@ async def stream_claim_analysis(
                 logger.info(f"Starting analysis stream for claim {claim_id}")
                 yield f"data: {json.dumps({'type': 'status', 'content': 'Initializing analysis...'})}\n\n"
 
-                async for event in analysis_orchestrator.analyze_claim_stream(claim=claim, user_id=current_user.id):
+                async for event in analysis_orchestrator.analyze_claim_stream(
+                    claim=claim,
+                    user_id=current_user.id,
+                    preferred_domains=preferred_domains,
+                ):
                     if isinstance(event, dict):
                         yield f"data: {json.dumps(event)}\n\n"
 
