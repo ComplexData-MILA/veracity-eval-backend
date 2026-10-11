@@ -1,0 +1,22 @@
+def claim_reliabity_scoring(atomic_verdicts:list[str]) -> float:
+    """
+    This function calculates the claim reliability scoring based on the atomic verdicts.
+    The scoring is calculated as the ratio of true verdicts to the total number of verdicts.
+
+    :param atomic_verdicts: A list of values representing the atomic verdicts.
+    :return: A float value representing the claim reliability scoring.
+    """
+    if not atomic_verdicts or len(atomic_verdicts) == 0:
+        raise ValueError("Atomic verdicts list is empty")
+    score=0.0
+    for verdict in atomic_verdicts:
+        if verdict.lower() == "true":
+            score += 1.0
+        elif verdict.lower() == "false":
+            score += -1.0
+        elif verdict.lower() == "unverifiable":
+            score += 0.0
+        else:
+            raise ValueError(f"Invalid verdict value: {verdict}. Expected 'true', 'false', or 'unverifiable'.")
+
+    return score / len(atomic_verdicts)
