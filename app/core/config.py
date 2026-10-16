@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "misinformation_mitigation_db"
     POSTGRES_PORT: str = "5432"
 
-    VERTEX_AI_LOCATION: str = "us-central1"
+    VERTEX_AI_LOCATION: str = "global"
     VERTEX_AI_ENDPOINT_ID: str = "us-central1-aiplatform.googleapis.com"
     GOOGLE_CLOUD_PROJECT: str = "misinformation-mitigation"
     GOOGLE_APPLICATION_CREDENTIALS: str = os.path.join(
@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     TOGETHER_API_KEY: str = ""
 
-    LLAMA_MODEL_NAME: str = "meta/llama-3.3-70b-instruct-maas"
+    LLAMA_MODEL_NAME: str = "google/gemma-4-26b-a4b-it-maas"
 
     # Which provider backs claim extraction: "vertex" | "together"
     EXTRACTION_LLM_PROVIDER: str = "vertex"
