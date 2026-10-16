@@ -1,30 +1,51 @@
 #!/bin/bash
 
 # Stop the script if any command fails
-set -e
+set -euo pipefail
+
+# Run from the repository root regardless of where the script is called from
+cd "$(dirname "$0")/.."
 
 # Load environment variables from .env file
 if [ -f .env ]; then
-    export $(cat .env | xargs)
-fi
-
-# Check if required environment variables are set
-if [ -z "$TF_VAR_db_password" ]; then
-    echo "ERROR: TF_VAR_db_password is not set. Please set this environment variable in your .env file."
-    exit 1
+    set -a
+    # shellcheck disable=SC1091
+    . ./.env
+    set +a
 fi
 
 # Configure variables
 PROJECT_ID="misinformation-mitigation"
 REGION="northamerica-northeast1"
+ZONE="${REGION}-a"
 CLUSTER_NAME="misinformation-mitigation-gke-cluster"
 IMAGE_NAME="misinformation-mitigation-api"
+REGISTRY="${REGION}-docker.pkg.dev/${PROJECT_ID}/misinformation-mitigation"
 TERRAFORM_DIR="./infrastructure/terraform"
-KUBERNETES_DIR="./infrastructure/kubernetes"
+HEALTH_URL="https://api.veri-fact.ai/v1/health"
+
+# Fall back to the app's own variable names so the same keys need not be duplicated in .env
+export TF_VAR_serper_api_key="${TF_VAR_serper_api_key:-${SERPER_API_KEY:-}}"
+export TF_VAR_together_api_key="${TF_VAR_together_api_key:-${TOGETHER_API_KEY:-}}"
+export TF_VAR_google_search_api_key="${TF_VAR_google_search_api_key:-${GOOGLE_SEARCH_API_KEY:-}}"
+export TF_VAR_google_search_engine_id="${TF_VAR_google_search_engine_id:-${GOOGLE_SEARCH_ENGINE_ID:-}}"
+export TF_VAR_auth0_client_id="${TF_VAR_auth0_client_id:-${AUTH0_CLIENT_ID:-}}"
+export TF_VAR_auth0_client_secret="${TF_VAR_auth0_client_secret:-${AUTH0_CLIENT_SECRET:-}}"
+
+# Check if required environment variables are set (Terraform variables without defaults)
+missing=0
+for var in TF_VAR_db_password TF_VAR_serper_api_key TF_VAR_together_api_key TF_VAR_google_search_api_key \
+           TF_VAR_google_search_engine_id TF_VAR_auth0_client_id TF_VAR_auth0_client_secret; do
+    if [ -z "${!var:-}" ]; then
+        echo "ERROR: $var is not set. Please set this environment variable in your .env file."
+        missing=1
+    fi
+done
+[ "$missing" -eq 0 ] || exit 1
 
 # Function to check if a command is available
 check_command() {
-    if ! command -v $1 &> /dev/null
+    if ! command -v "$1" &> /dev/null
     then
         echo "$1 is not installed. Please install it before continuing."
         exit 1
@@ -36,19 +57,37 @@ check_command gcloud
 check_command docker
 check_command terraform
 check_command kubectl
+check_command git
 
-# Log in to GCP and set up application default credentials
-echo "Logging in to Google Cloud and setting up application default credentials..."
-gcloud auth login
-gcloud auth application-default login
+# The image is tagged with the commit SHA, so the build must match that commit exactly
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+    echo "ERROR: You have uncommitted changes. Commit or stash them before deploying."
+    exit 1
+fi
+IMAGE_TAG=$(git rev-parse --short HEAD)
+if [ -z "$(git branch -r --contains HEAD)" ]; then
+    echo "ERROR: Commit $IMAGE_TAG has not been pushed to GitHub. Push it before deploying."
+    exit 1
+fi
+IMAGE_URI="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+
+# Log in to GCP and set up application default credentials (only when not already logged in)
+if ! gcloud auth print-access-token > /dev/null 2>&1; then
+    echo "Logging in to Google Cloud..."
+    gcloud auth login
+fi
+if ! gcloud auth application-default print-access-token > /dev/null 2>&1; then
+    echo "Setting up application default credentials..."
+    gcloud auth application-default login
+fi
 gcloud config set project $PROJECT_ID
+gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
 # Enable Docker BuildKit
 export DOCKER_BUILDKIT=1
 
 # Build and push multi-architecture Docker image
-echo "Building and pushing multi-architecture Docker image..."
-IMAGE_TAG=$(git rev-parse --short HEAD)
+echo "Building and pushing multi-architecture Docker image ${IMAGE_URI}..."
 
 # Check if the builder already exists
 if docker buildx inspect mybuilder > /dev/null 2>&1; then
@@ -63,23 +102,39 @@ docker buildx inspect --bootstrap
 
 # Build and push the multi-arch image
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t gcr.io/$PROJECT_ID/$IMAGE_NAME:$IMAGE_TAG \
-  -t gcr.io/$PROJECT_ID/$IMAGE_NAME:latest \
+  -t "${IMAGE_URI}" \
+  -t "${REGISTRY}/${IMAGE_NAME}:latest" \
   --push .
 
 # Apply Terraform configuration
-echo "Applying Terraform configuration..."
+echo "Planning Terraform changes..."
+export TF_VAR_image_uri="${IMAGE_URI}"
 cd $TERRAFORM_DIR
+# A saved plan contains secrets in plain text; always remove it
+trap 'rm -f "$PWD/tfplan"' EXIT
 terraform init -reconfigure
-terraform apply -auto-approve
+terraform plan -out=tfplan
 
-DB_CONNECTION_NAME=$(terraform output -raw database_connection_name)
-cd -
+# The plan covers the database, networking and ingress as well as the API image,
+# so review it before applying.
+read -r -p "Apply this plan? Type 'yes' to continue: " answer
+if [ "$answer" != "yes" ]; then
+    echo "Aborted. Nothing was applied."
+    rm -f tfplan
+    exit 1
+fi
+terraform apply tfplan
+rm -f tfplan
+cd - > /dev/null
 
 echo "Connecting to GKE cluster..."
-gcloud container clusters get-credentials $CLUSTER_NAME --region ${REGION}-a
+gcloud container clusters get-credentials $CLUSTER_NAME --zone "$ZONE"
 
-kubectl rollout status deployment/misinformation-mitigation-api -n misinformation-mitigation
+kubectl rollout status deployment/misinformation-mitigation-api -n misinformation-mitigation --timeout=10m
 
-echo "Deployment completed successfully!"
-echo "You can access your API via the URL configured in the Ingress."
+echo "Checking API health at ${HEALTH_URL}..."
+curl -fsS --max-time 30 "$HEALTH_URL"
+echo
+
+echo "Deployment of ${IMAGE_TAG} completed successfully!"
+echo "To roll back, check out the previous commit and run this script again."

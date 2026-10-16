@@ -199,7 +199,8 @@ resource "google_sql_database_instance" "misinformation_mitigation_db" {
   depends_on = [google_service_networking_connection.private_vpc_connection]
 
   settings {
-    tier = "db-custom-1-3840"
+    tier    = "db-custom-1-3840"
+    edition = "ENTERPRISE"
 
     ip_configuration {
       ipv4_enabled    = false
@@ -424,6 +425,11 @@ resource "google_compute_managed_ssl_certificate" "misinformation_mitigation_cer
 }
 
 resource "kubernetes_ingress_v1" "misinformation_mitigation_ingress" {
+  # GKE appends its auto-provisioned managed certificate to this annotation
+  lifecycle {
+    ignore_changes = [metadata[0].annotations["ingress.gcp.kubernetes.io/pre-shared-cert"]]
+  }
+
   metadata {
     name      = "misinformation-mitigation-ingress"
     namespace = kubernetes_namespace.misinformation_mitigation.metadata[0].name
