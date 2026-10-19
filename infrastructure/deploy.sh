@@ -79,7 +79,7 @@ elif ! git merge-base --is-ancestor HEAD origin/main; then
 fi
 
 # Shell scripts checked out with CRLF line endings cannot run inside the Linux container
-crlf_scripts=$(git ls-files --eol -- '*.sh' | awk '$2 == "w/crlf" {print $NF}')
+crlf_scripts=$(git ls-files --eol -- '*.sh' | awk '$2 == "w/crlf" {printf "%s ", $NF}')
 if [ -n "$crlf_scripts" ]; then
     echo "ERROR: These scripts have CRLF line endings in your checkout: $crlf_scripts"
     echo "Fix with: rm $crlf_scripts && git checkout -- $crlf_scripts"
