@@ -1,0 +1,10 @@
+VERTEX_AI_LOCATION=us-central1
+VERTEX_AI_ENDPOINT_ID=us-central1-aiplatform.googleapis.com
+TF_VAR_db_password="i7Ygg659x8X5t"
+GOOGLE_CLOUD_PROJECT=misinformation-mitigation
+LLAMA_MODEL_NAME=meta/llama-3.1-70b-instruct-maas
+GOOGLE_SEARCH_API_KEY=AIzaSyDHUXhnYbGzxusGpaZTwbL2ivrus8Nheec
+GOOGLE_SEARCH_ENGINE_ID=b7afd763a55334afc
+SERPER_API_KEY=2c03aaac1c8e6727a948d8e044154b88ab8acca6
+TOGETHER_API_KEY=tgp_v1_MCttPi6R1HHtQ9d-3H3EdVnKdIYxEeHoJxNG0W3WfH4
+DEBUG=false
