@@ -29,13 +29,13 @@ export TF_VAR_serper_api_key="${TF_VAR_serper_api_key:-${SERPER_API_KEY:-}}"
 export TF_VAR_together_api_key="${TF_VAR_together_api_key:-${TOGETHER_API_KEY:-}}"
 export TF_VAR_google_search_api_key="${TF_VAR_google_search_api_key:-${GOOGLE_SEARCH_API_KEY:-}}"
 export TF_VAR_google_search_engine_id="${TF_VAR_google_search_engine_id:-${GOOGLE_SEARCH_ENGINE_ID:-}}"
-export TF_VAR_auth0_client_id="${TF_VAR_auth0_client_id:-${AUTH0_CLIENT_ID:-}}"
-export TF_VAR_auth0_client_secret="${TF_VAR_auth0_client_secret:-${AUTH0_CLIENT_SECRET:-}}"
+# export TF_VAR_auth0_client_id="${TF_VAR_auth0_client_id:-${AUTH0_CLIENT_ID:-}}"
+# export TF_VAR_auth0_client_secret="${TF_VAR_auth0_client_secret:-${AUTH0_CLIENT_SECRET:-}}"
 
 # Check if required environment variables are set (Terraform variables without defaults)
 missing=0
 for var in TF_VAR_db_password TF_VAR_serper_api_key TF_VAR_together_api_key TF_VAR_google_search_api_key \
-           TF_VAR_google_search_engine_id TF_VAR_auth0_client_id TF_VAR_auth0_client_secret; do
+           TF_VAR_google_search_engine_id; do
     if [ -z "${!var:-}" ]; then
         echo "ERROR: $var is not set. Please set this environment variable in your .env file."
         missing=1
