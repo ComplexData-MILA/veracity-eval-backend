@@ -14,6 +14,7 @@ class AnalysisPrompt:
         When you have finished conducting all searches, your only message should be "READY".
         There should be no extra text. You must then wait for the User to specify their desired output format.
         "REASON: " and "SEARCH: " should only be used when invoking the search tool and must not appear in any other context.
+        You must invoke the search tool at least once before responding "READY"; do not rely on prior knowledge alone.
 
         Statement: {statement}
 
@@ -27,6 +28,7 @@ class AnalysisPrompt:
         Lorsque vous avez terminé d'effectuer toutes les recherches, votre seul message devrait être "PRÊT".
         Il ne doit pas y avoir de texte supplémentaire. Vous devez ensuite attendre que l'utilisateur spécifie le format de sortie souhaité.
         "REASON : " et "SEARCH : " doivent seulement être utilisées lors de l’invocation du moteur de recherche et ne doivent pas apparaître dans d’autres contextes.
+        Vous devez invoquer le moteur de recherche au moins une fois avant de répondre "PRÊT" ; ne vous fiez pas uniquement à vos connaissances.
 
         L’affirmation : {statement}
 

@@ -56,10 +56,12 @@ class VertexAILlamaProvider(LLMProvider):
 
             project_path = f"projects/{settings.GOOGLE_CLOUD_PROJECT}"
             location_path = f"locations/{settings.VERTEX_AI_LOCATION}"
-            base_url = (
-                f"https://{settings.VERTEX_AI_LOCATION}-aiplatform.googleapis.com/v1/"
-                f"{project_path}/{location_path}/endpoints/openapi"
-            )
+            # The global endpoint has no region prefix on the host
+            if settings.VERTEX_AI_LOCATION == "global":
+                host = "aiplatform.googleapis.com"
+            else:
+                host = f"{settings.VERTEX_AI_LOCATION}-aiplatform.googleapis.com"
+            base_url = f"https://{host}/v1/{project_path}/{location_path}/endpoints/openapi"
 
             logger.info(f"Initializing OpenAI client with base URL: {base_url}")
 
@@ -74,6 +76,12 @@ class VertexAILlamaProvider(LLMProvider):
                 "enabled": True,
                 "llama_guard_settings": {},
             }
+            # Llama Guard settings are Llama-only; other models reject the field with a 400
+            self.extra_body = (
+                {"extra_body": {"google": {"model_safety_settings": self.safety_settings}}}
+                if "llama" in self.model_id
+                else None
+            )
 
             logger.info("Successfully initialized Vertex AI Llama provider")
             logger.info(f"Model: {self.model_id}")
@@ -106,7 +114,7 @@ class VertexAILlamaProvider(LLMProvider):
                 model=self.model_id,
                 messages=[{"role": m.role, "content": m.content} for m in messages],
                 temperature=temperature,
-                extra_body={"extra_body": {"google": {"model_safety_settings": self.safety_settings}}},
+                extra_body=self.extra_body,
             )
 
             return Response(
@@ -138,7 +146,7 @@ class VertexAILlamaProvider(LLMProvider):
                 messages=[{"role": m.role, "content": m.content} for m in messages],
                 temperature=temperature,
                 stream=True,
-                extra_body={"extra_body": {"google": {"model_safety_settings": self.safety_settings}}},
+                extra_body=self.extra_body,
             )
 
             for chunk in response:
