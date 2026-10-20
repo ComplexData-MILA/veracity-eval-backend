@@ -24,6 +24,19 @@ REGISTRY="${REGION}-docker.pkg.dev/${PROJECT_ID}/misinformation-mitigation"
 TERRAFORM_DIR="./infrastructure/terraform"
 HEALTH_URL="https://api.veri-fact.ai/v1/health"
 
+# Dev environment overrides. Usage: DEPLOY_ENV=dev ./infrastructure/deploy.sh (from the dev-env branch)
+DEPLOY_ENV="${DEPLOY_ENV:-prod}"
+if [ "$DEPLOY_ENV" = "dev" ]; then
+    CLUSTER_NAME="misinformation-mitigation-dev-cluster"
+    TERRAFORM_DIR="./infrastructure/terraform-dev"
+    HEALTH_URL="https://api-dev.veri-fact.ai/v1/health"
+    # Dev has its own database; give it its own password when DEV_DB_PASSWORD is set
+    export TF_VAR_db_password="${DEV_DB_PASSWORD:-${TF_VAR_db_password:-}}"
+elif [ "$DEPLOY_ENV" != "prod" ]; then
+    echo "ERROR: DEPLOY_ENV must be 'prod' or 'dev', not '$DEPLOY_ENV'."
+    exit 1
+fi
+
 # Fall back to the app's own variable names so the same keys need not be duplicated in .env
 export TF_VAR_serper_api_key="${TF_VAR_serper_api_key:-${SERPER_API_KEY:-}}"
 export TF_VAR_together_api_key="${TF_VAR_together_api_key:-${TOGETHER_API_KEY:-}}"
@@ -64,6 +77,11 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
     echo "ERROR: You have uncommitted changes. Commit or stash them before deploying."
     exit 1
 fi
+# Dev is only ever deployed from the dev-env branch
+if [ "$DEPLOY_ENV" = "dev" ] && [ "$(git rev-parse --abbrev-ref HEAD)" != "dev-env" ]; then
+    echo "ERROR: Dev deploys must run from the dev-env branch. Run: git switch dev-env"
+    exit 1
+fi
 IMAGE_TAG=$(git rev-parse --short HEAD)
 git fetch --quiet origin
 if [ -n "${DEPLOY_TAG:-}" ]; then
@@ -73,7 +91,7 @@ if [ -n "${DEPLOY_TAG:-}" ]; then
 elif [ -z "$(git branch -r --contains HEAD)" ]; then
     echo "ERROR: Commit $IMAGE_TAG has not been pushed to GitHub. Push it before deploying."
     exit 1
-elif ! git merge-base --is-ancestor HEAD origin/main; then
+elif [ "$DEPLOY_ENV" = "prod" ] && ! git merge-base --is-ancestor HEAD origin/main; then
     read -r -p "WARNING: $IMAGE_TAG is not on origin/main. Deploy it anyway? Type 'yes' to continue: " answer
     [ "$answer" = "yes" ] || exit 1
 fi
@@ -137,6 +155,13 @@ cd $TERRAFORM_DIR
 # A saved plan contains secrets in plain text; always remove it
 trap "rm -f '$PWD/tfplan'" EXIT
 terraform init -reconfigure
+
+# kubernetes_manifest resources need a reachable cluster at plan time, so a
+# brand-new dev environment creates the cluster first in a separate apply.
+if [ "$DEPLOY_ENV" = "dev" ] && ! gcloud container clusters describe "$CLUSTER_NAME" --zone "$ZONE" > /dev/null 2>&1; then
+    terraform apply -target=google_container_node_pool.primary_nodes
+fi
+
 terraform plan -out=tfplan
 
 # The plan covers the database, networking and ingress as well as the API image,
@@ -153,6 +178,11 @@ cd - > /dev/null
 
 echo "Connecting to GKE cluster..."
 gcloud container clusters get-credentials $CLUSTER_NAME --zone "$ZONE"
+
+# A new dev cluster has no Vertex key secret yet; create it from the local key file
+if [ "$DEPLOY_ENV" = "dev" ] && ! kubectl get secret vertex-ai-credentials -n misinformation-mitigation > /dev/null 2>&1; then
+    kubectl -n misinformation-mitigation create secret generic vertex-ai-credentials --from-file=service-account.json
+fi
 
 kubectl rollout status deployment/misinformation-mitigation-api -n misinformation-mitigation --timeout=10m
 

@@ -20,3 +20,6 @@ get-pip.py
 hf_cache/
 infrastructure/deploy.ps1
 infrastructure/terraform/tfplan
+infrastructure/terraform-dev/.terraform
+infrastructure/terraform-dev/errored.tfstate
+infrastructure/terraform-dev/tfplan
