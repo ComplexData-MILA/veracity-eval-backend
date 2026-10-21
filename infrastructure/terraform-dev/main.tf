@@ -177,7 +177,9 @@ resource "google_project_iam_member" "gke_sa_roles" {
     "roles/container.developer",
     "roles/cloudsql.client",
     "roles/cloudsql.instanceUser",
-    "roles/storage.objectViewer"
+    "roles/storage.objectViewer",
+    # Prod's SA has this granted by hand; nodes need it to pull from Artifact Registry
+    "roles/artifactregistry.reader"
   ])
 
   project = var.project_id

@@ -56,6 +56,12 @@ for var in TF_VAR_db_password TF_VAR_serper_api_key TF_VAR_together_api_key TF_V
 done
 [ "$missing" -eq 0 ] || exit 1
 
+# Dev creates its vertex-ai-credentials secret from this file after Terraform applies; fail before changing anything
+if [ "$DEPLOY_ENV" = "dev" ] && [ ! -f service-account.json ]; then
+    echo "ERROR: service-account.json not found in the repository root. Dev deploys need it to create the vertex-ai-credentials secret."
+    exit 1
+fi
+
 # Function to check if a command is available
 check_command() {
     if ! command -v "$1" &> /dev/null

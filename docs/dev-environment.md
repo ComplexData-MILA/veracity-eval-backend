@@ -13,7 +13,7 @@ It lives in the same GCP project (`misinformation-mitigation`). Everything else 
 Kubernetes objects inside the dev cluster (namespace, deployment, ingress) keep prod's names, so the same `kubectl` commands work in both.
 
 Shared with prod:
-- the `veri-fact.ai` Cloud DNS zone, where dev adds its own `api-dev` A record
+- the `veri-fact.ai` domain. Its DNS is hosted on Cloudflare, where dev has its own `api-dev` A record, added by hand. Terraform also writes an `api-dev` record to the `veri-fact-ai-zone` Cloud DNS zone, but that zone isn't the one the domain uses, so the record has no effect.
 - the Artifact Registry, so a commit tested in dev is the exact image that later ships to prod
 - the Vertex service-account key (`service-account.json`)
 
@@ -30,8 +30,9 @@ The two Terraform roots are copies of each other. When you change resources in o
 
 ## First-time setup
 
-1. **Optional: give dev its own database password.** Add `DEV_DB_PASSWORD=...` to the same `.env`. If you leave it out, dev uses the prod value of `TF_VAR_db_password`. Dev has its own database instance either way.
-2. **Deploy from the `dev-env` branch:**
+1. **Put `service-account.json` in the repository root.** This is the Vertex key file used for local development. The script stops before changing anything if it is missing.
+2. **Optional: give dev its own database password.** Add `DEV_DB_PASSWORD=...` to the same `.env`. If you leave it out, dev uses the prod value of `TF_VAR_db_password`. Dev has its own database instance either way.
+3. **Deploy from the `dev-env` branch:**
    ```bash
    git switch dev-env
    DEPLOY_ENV=dev ./infrastructure/deploy.sh
@@ -39,7 +40,12 @@ The two Terraform roots are copies of each other. When you change resources in o
    - On the first run, Terraform first shows a plan for just the cluster and asks for `yes`. Then the script plans everything else and asks again. Both plans should show only creates.
    - As with prod, Terraform asks for `auth0_client_id` and `auth0_client_secret` unless they are set; the app doesn't use them.
    - The script then creates the `vertex-ai-credentials` secret in the dev cluster from the repo's local `service-account.json`, the same key file used for local development. It does this only when the secret doesn't exist yet.
-3. **Wait for the certificate.** Google needs about 15–60 minutes after DNS resolves to issue it. Until then the health check at the end of the script fails. Check progress with:
+4. **Add the DNS record in Cloudflare.** Get the dev static IP:
+   ```bash
+   terraform -chdir=infrastructure/terraform-dev output api_ip_address
+   ```
+   In the Cloudflare dashboard for `veri-fact.ai`, add an `A` record named `api-dev` pointing to that IP, with proxy status **DNS only** (grey cloud). Google can't issue the certificate while the record is proxied. Check it with `dig +short api-dev.veri-fact.ai`, which should print the static IP and not a Cloudflare `104.x` or `172.x` address.
+5. **Wait for the certificate.** Google needs about 15–60 minutes after DNS resolves to issue it. Until then the health check at the end of the script fails. Check progress with:
    ```bash
    kubectl -n misinformation-mitigation describe managedcertificate misinformation-mitigation-cert
    ```
@@ -75,7 +81,8 @@ The frontend reads `NEXT_PUBLIC_API_URL`, and falls back to `https://api.veri-fa
 
 Dev runs one e2-medium node (autoscaling to at most 2), a `db-g1-small` Cloud SQL instance, an HTTPS load balancer and Cloud NAT.
 
-To remove everything, run the command below. Terraform asks for each variable it doesn't find; for a destroy the values aren't used, so any value works. It deletes only dev resources, including the dev database and its data, and the `api-dev` DNS record.
+To remove everything, run the command below. Terraform asks for each variable it doesn't find; for a destroy the values aren't used, so any value works. It deletes only dev resources, including the dev database and its data.
 ```bash
 terraform -chdir=infrastructure/terraform-dev destroy
 ```
+Then delete the `api-dev` record in Cloudflare by hand; Terraform doesn't manage it.

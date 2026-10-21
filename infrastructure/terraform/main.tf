@@ -618,14 +618,17 @@ variable "user_email" {
 
 variable "serper_api_key" {
   description = "Serper search API Key"
+  sensitive   = true
 }
 
 variable "together_api_key" {
   description = "Together AI API Key"
+  sensitive   = true
 }
 
 variable "google_search_api_key" {
   description = "Google Search API Key"
+  sensitive   = true
 }
 
 variable "google_search_engine_id" {
@@ -638,5 +641,6 @@ variable "auth0_client_id" {
 
 variable "auth0_client_secret" {
   description = "Auth0 Client Secret"
+  sensitive   = true
 }
 
