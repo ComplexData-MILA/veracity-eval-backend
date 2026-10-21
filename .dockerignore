@@ -16,6 +16,7 @@ __pycache__
 **/.pytest_cache
 **/.mypy_cache
 infrastructure/terraform/.terraform
+infrastructure/terraform-dev/.terraform
 *.tfstate
 *.tfstate.*
 # Secrets: provided at runtime (Kubernetes secret mount / docker-compose bind mount), never baked into the image
@@ -23,3 +24,4 @@ env
 .env*
 service-account.json
 infrastructure/terraform/tfplan
+infrastructure/terraform-dev/tfplan

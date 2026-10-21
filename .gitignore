@@ -20,6 +20,9 @@ get-pip.py
 hf_cache/
 infrastructure/deploy.ps1
 infrastructure/terraform/tfplan
+infrastructure/terraform-dev/.terraform
+infrastructure/terraform-dev/errored.tfstate
+infrastructure/terraform-dev/tfplan
 
 # Secrets: never commit environment files (env was leaked publicly on 2026-10-19)
 env
