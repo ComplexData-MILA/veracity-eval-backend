@@ -68,6 +68,7 @@ app.add_middleware(
         "https://veracity-eval-frontend-git-feature-open-f37c90-complex-data-lab.vercel.app",
         "https://veracity-eval-frontend-git-g0frontend-veracity-s-projects.vercel.app",
         "https://veracity-eval-frontend-git-g0frontendmod-veracity-s-projects.vercel.app",
+        "https://veracity-eval-frontend-git-dev-env-veracity-s-projects.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
