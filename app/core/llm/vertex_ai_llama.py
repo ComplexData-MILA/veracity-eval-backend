@@ -110,12 +110,18 @@ class VertexAILlamaProvider(LLMProvider):
             logger.debug(f"Number of messages: {len(messages)}")
             logger.debug(f"Model ID: {self.model_id}")
 
-            response = self.client.chat.completions.create(
-                model=self.model_id,
-                messages=[{"role": m.role, "content": m.content} for m in messages],
-                temperature=temperature,
-                extra_body=self.extra_body,
-            )
+            # Vertex's safety filter intermittently blocks Llama 4 replies (finish_reason "content_filter",
+            # content None) on sensitive but legitimate claims; a resample usually passes.
+            for _ in range(3):
+                response = self.client.chat.completions.create(
+                    model=self.model_id,
+                    messages=[{"role": m.role, "content": m.content} for m in messages],
+                    temperature=temperature,
+                    extra_body=self.extra_body,
+                )
+                if response.choices[0].message.content is not None:
+                    break
+                logger.warning(f"Empty response (finish_reason={response.choices[0].finish_reason}), retrying")
 
             return Response(
                 text=response.choices[0].message.content,
