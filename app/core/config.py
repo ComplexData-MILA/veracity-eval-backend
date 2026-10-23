@@ -17,7 +17,8 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "misinformation_mitigation_db"
     POSTGRES_PORT: str = "5432"
 
-    VERTEX_AI_LOCATION: str = "global"
+    # Llama 4 on Vertex MaaS is served only from us-east5
+    VERTEX_AI_LOCATION: str = "us-east5"
     VERTEX_AI_ENDPOINT_ID: str = "us-central1-aiplatform.googleapis.com"
     GOOGLE_CLOUD_PROJECT: str = "misinformation-mitigation"
     GOOGLE_APPLICATION_CREDENTIALS: str = os.path.join(
@@ -30,7 +31,7 @@ class Settings(BaseSettings):
 
     TOGETHER_API_KEY: str = ""
 
-    LLAMA_MODEL_NAME: str = "google/gemma-4-26b-a4b-it-maas"
+    LLAMA_MODEL_NAME: str = "meta/llama-4-scout-17b-16e-instruct-maas"
 
     # Which provider backs claim extraction: "vertex" | "together"
     EXTRACTION_LLM_PROVIDER: str = "vertex"
