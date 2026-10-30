@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import math
@@ -7,12 +8,19 @@ from datetime import UTC, datetime
 from typing import Any, AsyncGenerator, Dict, List, NamedTuple, Optional
 from uuid import UUID, uuid4
 
+from app.core.config import settings
 from app.core.exceptions import NotAuthorizedException, NotFoundException, ValidationError
 from app.core.llm.interfaces import LLMProvider
 from app.core.llm.messages import Message as LLMMessage
 from app.core.llm.prompts import AnalysisPrompt
 from app.core.text_safety import clean_unicode_text, parse_analysis_response
-from app.models.database.models import AnalysisStatus, ClaimStatus, ConversationStatus, MessageSenderType
+from app.models.database.models import (
+    AnalysisStatus,
+    ClaimStatus,
+    ConversationStatus,
+    MessageSenderType,
+    SourceModel,
+)
 from app.models.domain.analysis import Analysis, LogProbsData
 from app.models.domain.claim import Claim
 from app.models.domain.claim_conversation import ClaimConversation
@@ -27,6 +35,13 @@ from app.repositories.implementations.message_repository import MessageRepositor
 from app.repositories.implementations.search_repository import SearchRepository
 from app.repositories.implementations.source_repository import SourceRepository
 from app.services.interfaces.web_search_service import WebSearchServiceInterface
+from app.services.claim_matching import TIER_FULL
+from app.services.semantic_cache_service import (
+    CacheHit,
+    CachePolicy,
+    SemanticCacheService,
+    split_for_replay,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +90,7 @@ class AnalysisOrchestrator:
         source_repo: SourceRepository,
         search_repo: SearchRepository,
         web_search_service: WebSearchServiceInterface,
+        semantic_cache: Optional[SemanticCacheService] = None,
     ):
         self._llm = llm_provider
         self._claim_repo = claim_repo
@@ -85,6 +101,7 @@ class AnalysisOrchestrator:
         self._source_repo = source_repo
         self._search_repo = search_repo
         self._web_search = web_search_service
+        self._cache = semantic_cache
         self._analysis_state = AnalysisState()
 
     async def _generate_analysis(
@@ -94,6 +111,7 @@ class AnalysisOrchestrator:
         language: str,
         default: bool = True,
         preferred_domains: list[str] | None = None,
+        cache_policy: CachePolicy | None = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Generate analysis for a claim with web search and source management."""
         try:
@@ -116,7 +134,19 @@ class AnalysisOrchestrator:
             query = self._query_initial(claim_text, language)
             messages = [LLMMessage(role="user", content=query)]
             all_sources = []
-            for turns in range(MAX_NUM_TURNS):
+
+            cache_key = self._cache.params_hash(language, default, preferred_domains) if self._cache else None
+            cache_embedding, cache_hit = await self._cache_lookup(claim_text, language, cache_key, cache_policy)
+            cache_hit, all_sources = await self._claim_cache_hit(cache_hit, current_analysis.id)
+            if cache_hit and cache_hit.tier == TIER_FULL:
+                async for event in self._replay_cached_analysis(current_analysis, cache_hit, all_sources):
+                    yield event
+                return
+            if cache_hit:
+                # Evidence tier: skip the search loop and give the verdict step the cached sources
+                messages = self._cached_evidence_messages(query, language, all_sources)
+
+            for turns in range(0 if cache_hit else MAX_NUM_TURNS):
 
                 await self._analysis_repo._session.rollback()
 
@@ -218,7 +248,7 @@ class AnalysisOrchestrator:
             else:
                 yield {
                     "type": "status",
-                    "content": f"Found {len(sources)} relevant sources (overall credibility: {source_credibility:.2f})",
+                    "content": f"Found {len(all_sources)} relevant sources (overall credibility: {source_credibility:.2f})",
                 }
 
             sources_text = self._web_search.format_sources_for_prompt(all_sources, language)
@@ -236,7 +266,8 @@ class AnalysisOrchestrator:
 
             await self._analysis_repo._session.rollback()
 
-            async for chunk in self._llm.generate_stream(messages):
+            verdict_temperature = settings.SEMCACHE_VERDICT_TEMPERATURE if cache_hit else 0.7
+            async for chunk in self._llm.generate_stream(messages, temperature=verdict_temperature):
                 if not chunk.is_complete:
                     analysis_text.append(chunk.text)
                     log_probs.append(chunk.metadata.get("logprobs"))
@@ -299,6 +330,9 @@ class AnalysisOrchestrator:
 
                         updated_analysis = await self._analysis_repo.update_stream_safe(current_analysis)
 
+                        if cache_embedding is not None and cache_hit is None:
+                            await self._cache_store(cache_embedding, claim_text, language, cache_key, updated_analysis)
+
                         yield {
                             "type": "analysis_complete",
                             "content": {
@@ -306,6 +340,7 @@ class AnalysisOrchestrator:
                                 "veracity_score": updated_analysis.veracity_score,
                                 "num_sources": len(all_sources),
                                 "source_credibility": source_credibility,
+                                **SemanticCacheService.hit_metadata(cache_hit),
                             },
                         }
 
@@ -567,12 +602,155 @@ class AnalysisOrchestrator:
         )
         return await self._message_repo.create(message)
 
+    async def _cache_lookup(
+        self, claim_text: str, language: str, cache_key: Optional[str], cache_policy: Optional[CachePolicy]
+    ) -> tuple[Optional[List[float]], Optional[CacheHit]]:
+        """Find a reusable cached analysis and return the claim embedding for storing a fresh result.
+
+        Exact (normalized) matches skip the embedding call; otherwise pgvector proposes candidates and the
+        NLI verifier decides. Cache failures never fail the analysis.
+        """
+        if not self._cache or not cache_policy or not cache_policy.write:
+            return None, None
+        try:
+            hit = await self._cache.exact_lookup(claim_text, language, cache_key) if cache_policy.read else None
+            embedding = None
+            if hit is None or settings.SEMANTIC_CACHE_MODE == "shadow":
+                embedding = await self._cache.embed(claim_text)
+            if hit is None and cache_policy.read:
+                candidates = await self._cache.candidates(embedding, language, cache_key)
+                hit = await self._cache.select_hit(claim_text, candidates)
+            if hit:
+                logger.info(
+                    f"Semantic cache {hit.tier} hit: reason={hit.reason} similarity={hit.similarity:.4f} "
+                    f"mode={settings.SEMANTIC_CACHE_MODE} cached_at={hit.cached_at.isoformat()}"
+                )
+                if settings.SEMANTIC_CACHE_MODE == "shadow":
+                    hit = None
+            return embedding, hit
+        except Exception as e:
+            logger.error(f"Semantic cache lookup failed, running full analysis: {str(e)}", exc_info=True)
+            await self._cache.rollback()
+            return None, None
+
+    async def _cache_store(
+        self, embedding: List[float], claim_text: str, language: str, cache_key: str, analysis: Analysis
+    ) -> None:
+        try:
+            await self._cache.store(
+                embedding=embedding,
+                claim_text=claim_text,
+                language=language,
+                params_hash=cache_key,
+                analysis_id=analysis.id,
+                veracity_score=analysis.veracity_score,
+                analysis_text=analysis.analysis_text,
+            )
+        except Exception as e:
+            logger.error(f"Semantic cache store failed: {str(e)}", exc_info=True)
+            await self._cache.rollback()
+
+    async def _claim_cache_hit(
+        self, cache_hit: Optional[CacheHit], analysis_id: UUID
+    ) -> tuple[Optional[CacheHit], List[SourceModel]]:
+        """Copy a hit's sources to the new analysis. A hit whose analysis was deleted from the app DB is dropped."""
+        if cache_hit is None:
+            return None, []
+        cloned = await self._clone_cached_sources(cache_hit.source_analysis_id, analysis_id)
+        if cloned is None:
+            await self._cache.invalidate(cache_hit.entry_id)
+            return None, []
+        await self._cache.record_hit(cache_hit.entry_id)
+        return cache_hit, cloned
+
+    def _cached_evidence_messages(self, query: str, language: str, sources: List[SourceModel]) -> List[LLMMessage]:
+        label = "Search result" if language == "english" else "Résultat(s) de la recherche sur le Web"
+        sources_prompt = self._web_search.format_sources_for_prompt(sources, language)
+        return [
+            LLMMessage(role="user", content=f"{query}\n\n{label}: {sources_prompt}"),
+            LLMMessage(role="assistant", content="READY" if language == "english" else "PRÊT"),
+        ]
+
+    async def _clone_cached_sources(self, source_analysis_id: UUID, analysis_id: UUID) -> Optional[List[SourceModel]]:
+        """Copy the cached analysis's searches and sources under the new analysis; None if it no longer exists."""
+        cached = await self._analysis_repo.get_with_relations(source_analysis_id)
+        if cached is None:
+            return None
+        all_sources = []
+        for cached_search in cached.searches or []:
+            search = await self._search_repo.create(
+                Search(
+                    id=uuid4(),
+                    analysis_id=analysis_id,
+                    prompt=cached_search.prompt,
+                    summary=cached_search.summary,
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC),
+                )
+            )
+            for cached_source in cached_search.sources or []:
+                source = await self._source_repo.create_with_domain(
+                    SourceModel(
+                        id=uuid4(),
+                        search_id=search.id,
+                        url=cached_source.url,
+                        title=cached_source.title,
+                        snippet=cached_source.snippet,
+                        domain_id=cached_source.domain_id,
+                        content=cached_source.content,
+                        credibility_score=cached_source.credibility_score,
+                        created_at=datetime.now(UTC),
+                        updated_at=datetime.now(UTC),
+                    )
+                )
+                all_sources.append(source)
+        await self._search_repo._session.commit()
+        return all_sources
+
+    async def _replay_cached_analysis(
+        self, current_analysis: Analysis, cache_hit: CacheHit, all_sources: List[SourceModel]
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Emit a cached analysis with the same events a live run produces."""
+        source_credibility = self._web_search.calculate_overall_credibility(all_sources)
+        yield {
+            "type": "status",
+            "content": f"Found {len(all_sources)} relevant sources (overall credibility: {source_credibility:.2f})",
+        }
+        yield {"type": "status", "content": "Analyzing claim with gathered sources..."}
+
+        raw = json.dumps(
+            {"veracity_score": round(cache_hit.veracity_score * 100), "analysis": cache_hit.analysis_text},
+            ensure_ascii=False,
+        )
+        for piece in split_for_replay(raw):
+            yield {"type": "content", "content": piece}
+            await asyncio.sleep(settings.SEMCACHE_REPLAY_DELAY_MS / 1000)
+
+        current_analysis.veracity_score = cache_hit.veracity_score
+        current_analysis.analysis_text = cache_hit.analysis_text
+        current_analysis.status = AnalysisStatus.completed.value
+        current_analysis.updated_at = datetime.now(UTC)
+        updated_analysis = await self._analysis_repo.update_stream_safe(current_analysis)
+
+        yield {
+            "type": "analysis_complete",
+            "content": {
+                "analysis_id": str(updated_analysis.id),
+                "veracity_score": updated_analysis.veracity_score,
+                "num_sources": len(all_sources),
+                "source_credibility": source_credibility,
+                **SemanticCacheService.hit_metadata(cache_hit),
+            },
+        }
+
     async def analyze_claim_stream(
         self,
         claim: Claim,
         user_id: UUID,
         default: bool = True,
         preferred_domains: list[str] | None = None,
+        bypass_cache: bool = False,
+        eval_mode: bool = False,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Stream the analysis process for a claim and initialize conversation."""
         try:
@@ -598,6 +776,7 @@ class AnalysisOrchestrator:
                 claim.language,
                 default=default,
                 preferred_domains=preferred_domains,
+                cache_policy=SemanticCacheService.policy(bypass_cache=bypass_cache, eval_mode=eval_mode),
             ):
                 if chunk["type"] == "analysis_complete":
                     analysis_complete = True
@@ -633,7 +812,7 @@ class AnalysisOrchestrator:
             yield {"type": "error", "content": str(e)}
             raise
 
-    async def analyze_claim_direct(self, claim_id: UUID, user_id: UUID) -> Dict[str, Any]:
+    async def analyze_claim_direct(self, claim_id: UUID, user_id: UUID, eval_mode: bool = False) -> Dict[str, Any]:
         claim = await self._claim_repo.get(claim_id)
         if not claim:
             raise ValueError(f"Claim {claim_id} not found")
@@ -644,7 +823,12 @@ class AnalysisOrchestrator:
         analysis_complete = False
         final_chunk = None
 
-        async for chunk in self._generate_analysis(claim.claim_text, claim.context, claim.language):
+        async for chunk in self._generate_analysis(
+            claim.claim_text,
+            claim.context,
+            claim.language,
+            cache_policy=SemanticCacheService.policy(eval_mode=eval_mode),
+        ):
             if chunk["type"] == "analysis_complete":
                 analysis_complete = True
                 final_chunk = chunk

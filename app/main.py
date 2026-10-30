@@ -1,6 +1,7 @@
 # from app.services.user_service import UserService
 # from app.repositories.implementations.user_repository import UserRepository
 # from app.db.session import AsyncSessionLocal
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -10,7 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import router
 from app.core.auth.auth0_middleware import Auth0Middleware
+from app.core.config import settings
 from app.core.scoring import load_distribution
+from app.services.claim_matching import ClaimVerifier
 
 formatter = logging.Formatter(fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
@@ -42,6 +45,9 @@ async def lifespan(app: FastAPI):
     # user_service = await get_user_service_startup()
     app.state.auth_middleware = Auth0Middleware()
     load_distribution(DISTRIBUTION_FILE)
+    if settings.SEMANTIC_CACHE_MODE != "off":
+        # Load the cache verifier in the background so startup and health checks aren't delayed
+        app.state.verifier_warm_up = asyncio.create_task(ClaimVerifier().warm_up())
     yield
     logging.info("API Shutting down")
 

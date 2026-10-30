@@ -302,13 +302,14 @@ class ClaimService:
         created_claims,
         user_id: str,
         analysis_orchestrator: AnalysisOrchestrator,
+        eval_mode: bool = False,
     ):
         successes = []
         failures = []
 
         for claim in created_claims:
             try:
-                result = await analysis_orchestrator.analyze_claim_direct(claim.id, user_id)
+                result = await analysis_orchestrator.analyze_claim_direct(claim.id, user_id, eval_mode=eval_mode)
                 analysis = result.get("analysis")
 
                 searches = analysis.searches or []

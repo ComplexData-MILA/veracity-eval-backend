@@ -63,6 +63,8 @@ async def stream_claim_analysis(
         default=None,
         description="Domains selected by the user for evidence retrieval",
     ),
+    bypass_cache: bool = Query(False, description="Re-check: skip the semantic cache and refresh its entry"),
+    eval_mode: bool = Query(False, description="Benchmark/eval run: never read or write the semantic cache"),
     current_user: User = Depends(get_current_user),
     analysis_orchestrator: AnalysisOrchestrator = Depends(get_orchestrator_service),
     claim_service: ClaimService = Depends(get_claim_service),
@@ -88,6 +90,8 @@ async def stream_claim_analysis(
                     claim=claim,
                     user_id=current_user.id,
                     preferred_domains=preferred_domains,
+                    bypass_cache=bypass_cache,
+                    eval_mode=eval_mode,
                 ):
                     if isinstance(event, dict):
                         yield f"data: {json.dumps(event)}\n\n"

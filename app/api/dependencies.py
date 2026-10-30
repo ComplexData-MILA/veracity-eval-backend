@@ -43,6 +43,7 @@ from app.services.search_service import SearchService
 from app.services.feedback_service import FeedbackService
 from app.services.discussion_service import DiscussionService
 from app.services.post_service import PostService
+from app.services.semantic_cache_service import SemanticCacheService
 from app.db.session import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
@@ -231,6 +232,10 @@ async def get_serper_web_search_service(
     return SerperWebSearchService(domain_service, source_repository)
 
 
+async def get_semantic_cache_service(session: AsyncSession = Depends(get_db)) -> SemanticCacheService:
+    return SemanticCacheService(session)
+
+
 async def get_orchestrator_service(
     claim_repository: ClaimRepository = Depends(get_claim_repository),
     analysis_repository: AnalysisRepository = Depends(get_analysis_repository),
@@ -241,6 +246,7 @@ async def get_orchestrator_service(
     search_repository: SearchRepository = Depends(get_search_repository),
     web_search_service: WebSearchServiceInterface = Depends(get_web_search_service),
     llm_provider=Depends(get_llm_provider),
+    semantic_cache: SemanticCacheService = Depends(get_semantic_cache_service),
 ) -> AnalysisOrchestrator:
     llm_provider = VertexAILlamaProvider(settings)
 
@@ -254,6 +260,7 @@ async def get_orchestrator_service(
         search_repo=search_repository,
         web_search_service=web_search_service,
         llm_provider=llm_provider,
+        semantic_cache=semantic_cache,
     )
 
 
@@ -306,6 +313,7 @@ async def get_serper_orchestrator_service(
     search_repository: SearchRepository = Depends(get_search_repository),
     web_search_service: WebSearchServiceInterface = Depends(get_serper_web_search_service),
     llm_provider=Depends(get_llm_provider),
+    semantic_cache: SemanticCacheService = Depends(get_semantic_cache_service),
 ) -> AnalysisOrchestrator:
     llm_provider = VertexAILlamaProvider(settings)
 
@@ -319,6 +327,7 @@ async def get_serper_orchestrator_service(
         search_repo=search_repository,
         web_search_service=web_search_service,
         llm_provider=llm_provider,
+        semantic_cache=semantic_cache,
     )
 
 

@@ -62,6 +62,7 @@ async def create_claim(
 async def create_claims_batch(
     claims: List[ClaimCreate],
     background_tasks: BackgroundTasks,
+    eval_mode: bool = Query(False, description="Benchmark/eval run: never read or write the semantic cache"),
     current_user: User = Depends(get_current_user),
     claim_service: ClaimService = Depends(get_claim_service),
     analysis_orchestrator: AnalysisOrchestrator = Depends(get_serper_orchestrator_service),
@@ -77,7 +78,11 @@ async def create_claims_batch(
         )
         claim_ids = [str(claim.id) for claim in created_claims]
         background_tasks.add_task(
-            claim_service.process_claims_batch_async, created_claims, current_user.id, analysis_orchestrator
+            claim_service.process_claims_batch_async,
+            created_claims,
+            current_user.id,
+            analysis_orchestrator,
+            eval_mode,
         )
         return {"message": f"Processing {len(created_claims)} claims in the background.", "claim_ids": claim_ids}
     except MonthlyLimitExceededError:

@@ -46,6 +46,21 @@ class Settings(BaseSettings):
     AUTH0_ALGORITHMS: str = "RS256"
     AUTH0_ISSUER: str = "https://veri-fact.ca.auth0.com/"
 
+    # Semantic cache of completed analyses (pgvector). "off" disables it entirely,
+    # e.g. for a benchmark deployment; per-request eval_mode does the same.
+    SEMANTIC_CACHE_MODE: str = "on"  # "on" | "shadow" | "off"
+    SEMCACHE_EMBEDDING_MODEL: str = "text-multilingual-embedding-002"
+    SEMCACHE_EMBEDDING_LOCATION: str = "us-central1"
+    # Similarity only proposes candidates (top K above T_RECALL); the NLI verifier decides reuse.
+    # T_RECALL / ENTAIL_T were calibrated on curated claim pairs, XNLI and role-swap pairs (docs/semantic-cache.md).
+    SEMCACHE_TOP_K: int = 3
+    SEMCACHE_T_RECALL: float = 0.85
+    SEMCACHE_VERIFIER_MODEL: str = "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7"
+    SEMCACHE_ENTAIL_T: float = 0.92
+    SEMCACHE_TTL_HOURS: int = 168
+    SEMCACHE_VERDICT_TEMPERATURE: float = 0.2
+    SEMCACHE_REPLAY_DELAY_MS: int = 15
+
     DEBUG: bool = False
 
     # For OpenFake
