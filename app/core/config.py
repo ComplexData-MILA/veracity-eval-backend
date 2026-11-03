@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     SEMCACHE_TOP_K: int = 3
     SEMCACHE_T_RECALL: float = 0.85
     SEMCACHE_VERIFIER_MODEL: str = "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7"
+    # Run the verifier with its vocabulary trimmed to EN/FR pieces (~0.37 GB instead of ~1.27 GB loaded)
+    SEMCACHE_VERIFIER_TRIM: bool = True
     SEMCACHE_ENTAIL_T: float = 0.92
     SEMCACHE_TTL_HOURS: int = 168
     SEMCACHE_VERDICT_TEMPERATURE: float = 0.2

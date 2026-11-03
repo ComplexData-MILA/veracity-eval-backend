@@ -92,7 +92,11 @@ class ClaimVerifier:
         if cls._model is None:
             from sentence_transformers import CrossEncoder
 
-            cls._model = CrossEncoder(settings.SEMCACHE_VERIFIER_MODEL, device="cpu")
+            from app.services.verifier_trim import ensure_trimmed_model
+
+            source = settings.SEMCACHE_VERIFIER_MODEL
+            path = ensure_trimmed_model(source) if settings.SEMCACHE_VERIFIER_TRIM else source
+            cls._model = CrossEncoder(path, device="cpu")
             labels = {v.lower(): int(k) for k, v in cls._model.model.config.id2label.items()}
             cls._entail_idx = labels["entailment"]
         return cls._model

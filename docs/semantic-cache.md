@@ -42,10 +42,20 @@ logged and falls back to the normal pipeline. Each candidate's similarity, entai
   modifier moved. They're a stress test, not typical claims.
 
 **Costs measured on CPU.**
-- The verifier model is about 1.06 GB in memory (279M parameters, 193M of them its multilingual vocabulary).
-- A lookup with candidates adds about 150 ms on a 16-core machine, or about 260 ms with 2 threads (e2-medium).
-- The model is loaded in the background at startup (`app/main.py`), since a cold load takes about 13 s.
-- Int8 quantization was tested and rejected: no speed-up, and recall dropped to 2/15.
+- **Memory:** the verifier runs with its vocabulary trimmed to the pieces English and French use
+  ([app/services/verifier_trim.py](../app/services/verifier_trim.py)), following Ushio et al., EMNLP Findings 2023. This
+  keeps 37k of 251k pieces: 115M parameters instead of 279M, and about 0.38 GB loaded instead of about 1.27 GB.
+- **Calibration of the trimmed model:** the same results as the full model. That means 0 wrong reuses on the claim pairs
+  and XNLI at 0.92, 9–10 of 15 same-claim pairs found, and 63 instead of 68 of 350 wrong reuses on PAWS-X.
+- **What trimming changes:** rare names not in the trimming corpus get split into smaller pieces, which shifts their
+  scores. Across 1,247 test pairs, decisions changed on 14, mostly PAWS-X sentences with rare names.
+- **Latency:** a lookup with candidates adds about 150 ms on a 16-core machine, or about 260 ms with 2 threads (e2-medium).
+- **Build:** the trimmed model is built from the original checkpoint and
+  [app/services/data/verifier_vocab_enfr.json](../app/services/data/verifier_vocab_enfr.json) at image build
+  (`app/preload_model.py`), or on first use if missing. It's loaded in the background at startup (`app/main.py`).
+- **Rejected alternatives:**
+  - `multilingual-MiniLMv2-L12-mnli-xnli`: 8× faster, but it scores role swaps up to 0.75 and needs a 0.97 threshold.
+  - Int8 quantization: no speed-up, and recall dropped to 2/15.
 
 ### API
 
@@ -71,7 +81,8 @@ show it. Batch results (`/claims/batch/results`) don't include it either.
 |---|---|---|
 | `SEMANTIC_CACHE_MODE` | `on` | `shadow` looks up and logs would-be hits but always runs fresh. `off` disables the cache completely; use it for a dedicated benchmark deployment. |
 | `SEMCACHE_TOP_K` / `SEMCACHE_T_RECALL` | `3` / `0.85` | Candidate retrieval. Each candidate costs one verifier pass (both directions). |
-| `SEMCACHE_VERIFIER_MODEL` | `MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7` | Baked into the image by `app/preload_model.py`; keep the two in sync. |
+| `SEMCACHE_VERIFIER_MODEL` | `MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7` | Source checkpoint; the trimmed copy is built from it into the image by `app/preload_model.py`. |
+| `SEMCACHE_VERIFIER_TRIM` | `true` | `false` runs the full model (about 1.27 GB). After regenerating the vocabulary with `tests/build_verifier_vocab.py`, re-run `tests/calibrate.py`. |
 | `SEMCACHE_ENTAIL_T` | `0.92` | Re-check with `tests/calibrate.py` after changing the model or threshold. |
 | `SEMCACHE_TTL_HOURS` | `168` | Weekly refresh. |
 | `SEMCACHE_EMBEDDING_MODEL` / `SEMCACHE_EMBEDDING_LOCATION` | `text-multilingual-embedding-002` / `us-central1` | |
