@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 ExtractionReason = Literal["ok", "no_claims", "llm_error", "too_long"]
 
@@ -40,4 +40,29 @@ class ClaimExtractionResponse(BaseModel):
 
     statements: List[ExtractedStatement]
     reason: ExtractionReason = "ok"
+    language: str
+
+
+class ClarificationTurn(BaseModel):
+    """A clarifying question already shown to the user, and their answer (null if skipped)."""
+
+    question: str = Field(..., min_length=1, max_length=1000)
+    answer: Optional[str] = Field(None, max_length=1000)
+
+
+class ClaimClarificationRequest(ClaimExtractionRequest):
+    """Schema for deciding whether a claim needs clarifying before it is fact-checked."""
+
+    text: str = Field(..., min_length=1, max_length=2000)
+    turns: List[ClarificationTurn] = Field(default_factory=list, max_length=5)
+
+
+class ClaimClarificationResponse(BaseModel):
+    """Either a question to show the user, or the clarified claim to submit to POST /claims/."""
+
+    status: Literal["ask", "ready"]
+    claim: str
+    question: Optional[str] = None
+    options: List[str] = []
+    assumptions: List[str] = []
     language: str

@@ -27,6 +27,12 @@ MAX_STATEMENTS = 10
 MAX_STATEMENT_CHARS = 1000
 MIN_STATEMENT_CHARS = 8
 
+CLARIFY_ASK = "ask"
+CLARIFY_READY = "ready"
+# Clarifying questions asked before the claim is fact-checked anyway.
+MAX_CLARIFY_ROUNDS = 2
+MAX_CLARIFY_OPTIONS = 4
+
 
 @dataclass
 class ExtractionResult:
@@ -34,6 +40,50 @@ class ExtractionResult:
 
     statements: List[str] = field(default_factory=list)
     reason: str = REASON_OK
+
+
+@dataclass
+class ClarificationResult:
+    """Either a clarifying question for the user, or the claim ready to fact-check."""
+
+    status: str
+    claim: str
+    question: Optional[str] = None
+    options: List[str] = field(default_factory=list)
+    assumptions: List[str] = field(default_factory=list)
+
+
+def _clean_strings(values, limit: int) -> List[str]:
+    if not isinstance(values, list):
+        return []
+    cleaned = [clean_unicode_text(v).strip() for v in values if isinstance(v, str)]
+    return [v for v in cleaned if v][:limit]
+
+
+def parse_clarification_response(raw_text: str, original_claim: str, allow_ask: bool) -> ClarificationResult:
+    """Parse the clarification JSON. Anything unusable fails open to fact-checking the original claim."""
+    try:
+        data = json.loads(extract_json_candidate(raw_text))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        logger.warning(
+            "Malformed clarification JSON from LLM. Proceeding without clarification. Raw=%r", raw_text[:2000]
+        )
+        return ClarificationResult(CLARIFY_READY, original_claim)
+
+    if not isinstance(data, dict):
+        return ClarificationResult(CLARIFY_READY, original_claim)
+
+    question = clean_unicode_text(data.get("question") or "").strip()
+    if allow_ask and data.get("status") == CLARIFY_ASK and question:
+        return ClarificationResult(
+            CLARIFY_ASK,
+            original_claim,
+            question=question,
+            options=_clean_strings(data.get("options"), MAX_CLARIFY_OPTIONS),
+        )
+
+    claim = clean_unicode_text(data.get("claim") or "").strip()[:MAX_STATEMENT_CHARS] or original_claim
+    return ClarificationResult(CLARIFY_READY, claim, assumptions=_clean_strings(data.get("assumptions"), 5))
 
 
 def _to_items(data) -> List:
@@ -147,6 +197,25 @@ class ClaimExtractionService:
 
         return ExtractionResult(statements, REASON_OK)
 
+    async def clarify(self, text: str, language: str, turns: List[Tuple[str, Optional[str]]]) -> ClarificationResult:
+        """Ask one clarifying question if a missing detail would change the verdict, else return the claim to check.
+
+        Stateless: the caller sends back every earlier (question, answer) pair; an answer of None means the user
+        skipped it, so the model proceeds with a stated assumption. Errors fail open to the original claim.
+        """
+        claim = clean_unicode_text(text).strip()
+        # A skipped question means "just check it": stop asking rather than rephrase the same question.
+        allow_ask = len(turns) < MAX_CLARIFY_ROUNDS and all(answer for _, answer in turns)
+        messages = [LLMMessage(role="user", content=self._build_clarify_prompt(claim, language, turns, allow_ask))]
+
+        try:
+            response = await self._llm.generate_response(messages, temperature=0.0)
+        except Exception:
+            logger.exception("Claim clarification LLM call failed")
+            return ClarificationResult(CLARIFY_READY, claim)
+
+        return parse_clarification_response(getattr(response, "text", "") or "", claim, allow_ask)
+
     def _prepare(self, text: str) -> Tuple[str, Optional[str]]:
         """Clean the input, or return the reason it cannot be processed."""
         cleaned = clean_unicode_text(text).strip()
@@ -167,3 +236,18 @@ class ClaimExtractionService:
     def _build_prompt(self, text: str, language: str) -> str:
         template = AnalysisPrompt.EXTRACT_CLAIMS_FR if language == "french" else AnalysisPrompt.EXTRACT_CLAIMS
         return template.format(text=text)
+
+    def _build_clarify_prompt(
+        self, claim: str, language: str, turns: List[Tuple[str, Optional[str]]], allow_ask: bool
+    ) -> str:
+        french = language == "french"
+        if french:
+            skipped = "(ignorée : choisissez l'interprétation la plus probable et indiquez-la comme hypothèse)"
+            ask_rule = "" if allow_ask else 'Vous devez maintenant renvoyer le statut "ready".'
+        else:
+            skipped = "(skipped: choose the most likely reading and state it as an assumption)"
+            ask_rule = "" if allow_ask else 'You must now return status "ready".'
+
+        lines = [f"Q: {question}\nA: {answer if answer else skipped}" for question, answer in turns]
+        template = AnalysisPrompt.CLARIFY_CLAIM_FR if french else AnalysisPrompt.CLARIFY_CLAIM
+        return template.format(claim=claim, turns="\n".join(lines) or "(none)", ask_rule=ask_rule)

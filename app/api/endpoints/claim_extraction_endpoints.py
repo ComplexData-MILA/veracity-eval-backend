@@ -4,6 +4,8 @@ import logging
 from app.api.dependencies import get_claim_extraction_service, get_current_user
 from app.models.domain.user import User
 from app.schemas.claim_extraction_schema import (
+    ClaimClarificationRequest,
+    ClaimClarificationResponse,
     ClaimExtractionRequest,
     ClaimExtractionResponse,
     ExtractedStatement,
@@ -36,5 +38,36 @@ async def extract_claims(
     return ClaimExtractionResponse(
         statements=[ExtractedStatement(id=f"s{index}", text=text) for index, text in enumerate(result.statements)],
         reason=result.reason,
+        language=data.language,
+    )
+
+
+@router.post(
+    "/clarify",
+    response_model=ClaimClarificationResponse,
+    summary="Ask a clarifying question before a claim is fact-checked, if one is needed",
+)
+async def clarify_claim(
+    data: ClaimClarificationRequest,
+    current_user: User = Depends(get_current_user),
+    extraction_service: ClaimExtractionService = Depends(get_claim_extraction_service),
+) -> ClaimClarificationResponse:
+    """Stateless clarification step between picking a statement and POST /claims/.
+
+    The client sends the earlier questions and answers back on each call. When the status is "ready", submit
+    the returned claim to POST /claims/, with the assumptions as its context. Like /extract, nothing is persisted.
+    """
+    result = await extraction_service.clarify(
+        text=data.text,
+        language=data.language,
+        turns=[(turn.question, turn.answer) for turn in data.turns],
+    )
+
+    return ClaimClarificationResponse(
+        status=result.status,
+        claim=result.claim,
+        question=result.question,
+        options=result.options,
+        assumptions=result.assumptions,
         language=data.language,
     )
