@@ -329,6 +329,14 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
           }
 
 
+          # The semantic cache verifier model adds ~1 GB; request it so the pod is placed on a node with room.
+          # No limit, so a spike is not OOM-killed at an arbitrary cap.
+          resources {
+            requests = {
+              memory = "1536Mi"
+            }
+          }
+
           port {
             container_port = 8001
           }
