@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
+from app.core.config import settings
 from app.core.llm.interfaces import LLMProvider
 from app.core.llm.messages import Message as LLMMessage
 from app.core.llm.prompts import AnalysisPrompt
@@ -204,6 +205,8 @@ class ClaimExtractionService:
         skipped it, so the model proceeds with a stated assumption. Errors fail open to the original claim.
         """
         claim = clean_unicode_text(text).strip()
+        if not settings.MULTITURN_ENABLED:
+            return ClarificationResult(CLARIFY_READY, claim)
         # A skipped question means "just check it": stop asking rather than rephrase the same question.
         allow_ask = len(turns) < MAX_CLARIFY_ROUNDS and all(answer for _, answer in turns)
         messages = [LLMMessage(role="user", content=self._build_clarify_prompt(claim, language, turns, allow_ask))]

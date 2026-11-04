@@ -79,6 +79,7 @@ show it. Batch results (`/claims/batch/results`) don't include it either.
 
 | Env var | Default | Notes |
 |---|---|---|
+| `SEMANTIC_CACHE_ENABLED` | `true` | `false` turns the cache off, the same as `SEMANTIC_CACHE_MODE=off`. A plain on/off switch for benchmarks: `kubectl set env deploy/misinformation-mitigation-api -n misinformation-mitigation SEMANTIC_CACHE_ENABLED=false` restarts the pod with no redeploy. The next `deploy.sh` resets it. |
 | `SEMANTIC_CACHE_MODE` | `on` | `shadow` looks up and logs would-be hits but always runs fresh. `off` disables the cache completely; use it for a dedicated benchmark deployment. |
 | `SEMCACHE_TOP_K` / `SEMCACHE_T_RECALL` | `3` / `0.85` | Candidate retrieval. Each candidate costs one verifier pass (both directions). |
 | `SEMCACHE_VERIFIER_MODEL` | `MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7` | Source checkpoint; the trimmed copy is built from it into the image by `app/preload_model.py`. |

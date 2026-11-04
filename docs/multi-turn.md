@@ -24,6 +24,7 @@ Fact-checking is now a short conversation instead of a single request:
 - Replies use the claim, the verdict, the sources and the recent conversation, and cite sources by title. When the sources don't cover something, the reply says so.
 - Evidence found during follow-ups is stored under the analysis and marked as follow-up evidence. It is never reused as cached evidence for a future verdict.
 - Batch, evaluation-mode and experiment runs skip clarification and work as before.
+- `MULTITURN_ENABLED=false` (env var, default `true`) turns both parts off: `/claims/clarify` returns the claim as ready without an LLM call, and follow-ups skip the router and answer from the existing sources. Flip it with `kubectl set env`, which restarts the pod with no redeploy.
 
 **Basis in the literature:** ask only when it matters (CLAM; Zhang & Choi, *Clarify When Necessary*, NAACL 2025); make clarification an explicit step, because LLMs rarely ask on their own (*Knowing but Not Showing*, 2026); rewrite claims to stand alone (CheckThat! 2025 claim normalization; Claimify); decide whether to answer now or search more (FIRE, NAACL 2025).
 

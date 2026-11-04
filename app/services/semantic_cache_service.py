@@ -78,7 +78,7 @@ class SemanticCacheService:
     @staticmethod
     def policy(bypass_cache: bool = False, eval_mode: bool = False) -> CachePolicy:
         """Eval runs never touch the cache; 'Re-check' skips the read but refreshes the entry."""
-        if eval_mode or settings.SEMANTIC_CACHE_MODE == "off":
+        if eval_mode or not settings.semantic_cache_enabled:
             return CachePolicy(read=False, write=False)
         return CachePolicy(read=not bypass_cache, write=True)
 

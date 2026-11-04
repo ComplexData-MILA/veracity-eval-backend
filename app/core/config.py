@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     # Semantic cache of completed analyses (pgvector). "off" disables it entirely,
     # e.g. for a benchmark deployment; per-request eval_mode does the same.
     SEMANTIC_CACHE_MODE: str = "on"  # "on" | "shadow" | "off"
+    # On/off switches for benchmarking each feature alone; flip with `kubectl set env` (pod restarts, no deploy)
+    SEMANTIC_CACHE_ENABLED: bool = True
+    # Clarifying questions before a check and the follow-up router after it
+    MULTITURN_ENABLED: bool = True
     SEMCACHE_EMBEDDING_MODEL: str = "text-multilingual-embedding-002"
     SEMCACHE_EMBEDDING_LOCATION: str = "us-central1"
     # Similarity only proposes candidates (top K above T_RECALL); the NLI verifier decides reuse.
@@ -110,6 +114,10 @@ class Settings(BaseSettings):
         print(f"Together AI API configured: {bool(self.TOGETHER_API_KEY)}")
         print(f"LLAMA_MODEL_NAME: {self.LLAMA_MODEL_NAME}")
         print("=====================================\n")
+
+    @property
+    def semantic_cache_enabled(self) -> bool:
+        return self.SEMANTIC_CACHE_ENABLED and self.SEMANTIC_CACHE_MODE != "off"
 
     @property
     def get_sync_database_url(self) -> str:

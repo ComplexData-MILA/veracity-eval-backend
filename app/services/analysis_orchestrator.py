@@ -3,6 +3,7 @@ import json
 import logging
 import math
 import re
+import time
 from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, AsyncGenerator, Dict, List, NamedTuple, Optional
@@ -65,6 +66,10 @@ FOLLOWUP_ANSWER = "answer"
 FOLLOWUP_SEARCH = "search"
 FOLLOWUP_RECHECK = "recheck"
 FOLLOWUP_SEARCH_SUMMARY = "followup"
+
+
+def _elapsed_ms(start: float) -> int:
+    return round((time.perf_counter() - start) * 1000)
 
 
 def parse_followup_route(raw_text: str) -> tuple[str, str]:
@@ -141,6 +146,9 @@ class AnalysisOrchestrator:
         cache_policy: CachePolicy | None = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Generate analysis for a claim with web search and source management."""
+        started = time.perf_counter()
+        # Per-stage durations, sent with analysis_complete for latency benchmarks
+        timings: Dict[str, int] = {}
         try:
             initial_analysis = Analysis(
                 id=uuid4(),
@@ -163,21 +171,28 @@ class AnalysisOrchestrator:
             all_sources = []
 
             cache_key = self._cache.params_hash(language, default, preferred_domains) if self._cache else None
-            cache_embedding, cache_hit = await self._cache_lookup(claim_text, language, cache_key, cache_policy)
-            cache_hit, all_sources = await self._claim_cache_hit(cache_hit, current_analysis.id)
+            cache_embedding, cache_hit = await self._cache_lookup(
+                claim_text, language, cache_key, cache_policy, timings
+            )
+            cache_hit, all_sources = await self._claim_cache_hit(cache_hit, current_analysis.id, timings)
             if cache_hit and cache_hit.tier == TIER_FULL:
-                async for event in self._replay_cached_analysis(current_analysis, cache_hit, all_sources):
+                async for event in self._replay_cached_analysis(
+                    current_analysis, cache_hit, all_sources, timings, started
+                ):
                     yield event
                 return
             if cache_hit:
                 # Evidence tier: skip the search loop and give the verdict step the cached sources
                 messages = self._cached_evidence_messages(query, language, all_sources)
 
+            stage = time.perf_counter()
+            timings["llm_turns"] = timings["searches"] = 0
             for turns in range(0 if cache_hit else MAX_NUM_TURNS):
 
                 await self._analysis_repo._session.rollback()
 
                 response = await self._llm.generate_response(messages)
+                timings["llm_turns"] += 1
 
                 main_agent_message = response.text
 
@@ -211,6 +226,7 @@ class AnalysisOrchestrator:
                     )
 
                     all_sources += sources
+                    timings["searches"] += 1
 
                     await self._analysis_repo._session.rollback()
 
@@ -243,6 +259,7 @@ class AnalysisOrchestrator:
                     or main_agent_message.strip().lower().endswith("prête")
                 ):
                     break
+            timings["search_loop"] = _elapsed_ms(stage)
             if preferred_domains and not all_sources:
                 current_analysis.status = AnalysisStatus.failed.value
                 current_analysis.analysis_text = (
@@ -294,13 +311,16 @@ class AnalysisOrchestrator:
             await self._analysis_repo._session.rollback()
 
             verdict_temperature = settings.SEMCACHE_VERDICT_TEMPERATURE if cache_hit else 0.7
+            stage = time.perf_counter()
             async for chunk in self._llm.generate_stream(messages, temperature=verdict_temperature):
+                timings.setdefault("verdict_ttft", _elapsed_ms(stage))
                 if not chunk.is_complete:
                     analysis_text.append(chunk.text)
                     log_probs.append(chunk.metadata.get("logprobs"))
                     yield {"type": "content", "content": chunk.text}
                 else:
                     full_text = "".join(analysis_text)
+                    timings["verdict"] = _elapsed_ms(stage)
                     # logger.warning(f"length {len(analysis_text)}, {analysis_text}")
                     # logger.warning(f"length {len(log_probs)}, {log_probs}")
 
@@ -358,7 +378,11 @@ class AnalysisOrchestrator:
                         updated_analysis = await self._analysis_repo.update_stream_safe(current_analysis)
 
                         if cache_embedding is not None and cache_hit is None:
+                            stage = time.perf_counter()
                             await self._cache_store(cache_embedding, claim_text, language, cache_key, updated_analysis)
+                            timings["cache_store"] = _elapsed_ms(stage)
+                        timings["total"] = _elapsed_ms(started)
+                        logger.info(f"Analysis timings: {timings}")
 
                         yield {
                             "type": "analysis_complete",
@@ -368,6 +392,7 @@ class AnalysisOrchestrator:
                                 "num_sources": len(all_sources),
                                 "source_credibility": source_credibility,
                                 **SemanticCacheService.hit_metadata(cache_hit),
+                                "timings_ms": timings,
                             },
                         }
 
@@ -630,7 +655,12 @@ class AnalysisOrchestrator:
         return await self._message_repo.create(message)
 
     async def _cache_lookup(
-        self, claim_text: str, language: str, cache_key: Optional[str], cache_policy: Optional[CachePolicy]
+        self,
+        claim_text: str,
+        language: str,
+        cache_key: Optional[str],
+        cache_policy: Optional[CachePolicy],
+        timings: Optional[Dict[str, int]] = None,
     ) -> tuple[Optional[List[float]], Optional[CacheHit]]:
         """Find a reusable cached analysis and return the claim embedding for storing a fresh result.
 
@@ -639,14 +669,24 @@ class AnalysisOrchestrator:
         """
         if not self._cache or not cache_policy or not cache_policy.write:
             return None, None
+        timings = {} if timings is None else timings
         try:
+            stage = time.perf_counter()
             hit = await self._cache.exact_lookup(claim_text, language, cache_key) if cache_policy.read else None
+            timings["cache_exact"] = _elapsed_ms(stage)
             embedding = None
             if hit is None or settings.SEMANTIC_CACHE_MODE == "shadow":
+                stage = time.perf_counter()
                 embedding = await self._cache.embed(claim_text)
+                timings["cache_embed"] = _elapsed_ms(stage)
             if hit is None and cache_policy.read:
+                stage = time.perf_counter()
                 candidates = await self._cache.candidates(embedding, language, cache_key)
+                timings["cache_candidates"] = _elapsed_ms(stage)
+                timings["n_candidates"] = len(candidates)
+                stage = time.perf_counter()
                 hit = await self._cache.select_hit(claim_text, candidates)
+                timings["cache_verify"] = _elapsed_ms(stage)
             if hit:
                 logger.info(
                     f"Semantic cache {hit.tier} hit: reason={hit.reason} similarity={hit.similarity:.4f} "
@@ -678,12 +718,14 @@ class AnalysisOrchestrator:
             await self._cache.rollback()
 
     async def _claim_cache_hit(
-        self, cache_hit: Optional[CacheHit], analysis_id: UUID
+        self, cache_hit: Optional[CacheHit], analysis_id: UUID, timings: Dict[str, int]
     ) -> tuple[Optional[CacheHit], List[SourceModel]]:
         """Copy a hit's sources to the new analysis. A hit whose analysis was deleted from the app DB is dropped."""
         if cache_hit is None:
             return None, []
+        stage = time.perf_counter()
         cloned = await self._clone_cached_sources(cache_hit.source_analysis_id, analysis_id)
+        timings["cache_clone"] = _elapsed_ms(stage)
         if cloned is None:
             await self._cache.invalidate(cache_hit.entry_id)
             return None, []
@@ -737,9 +779,15 @@ class AnalysisOrchestrator:
         return all_sources
 
     async def _replay_cached_analysis(
-        self, current_analysis: Analysis, cache_hit: CacheHit, all_sources: List[SourceModel]
+        self,
+        current_analysis: Analysis,
+        cache_hit: CacheHit,
+        all_sources: List[SourceModel],
+        timings: Dict[str, int],
+        started: float,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Emit a cached analysis with the same events a live run produces."""
+        stage = time.perf_counter()
         source_credibility = self._web_search.calculate_overall_credibility(all_sources)
         yield {
             "type": "status",
@@ -760,6 +808,9 @@ class AnalysisOrchestrator:
         current_analysis.status = AnalysisStatus.completed.value
         current_analysis.updated_at = datetime.now(UTC)
         updated_analysis = await self._analysis_repo.update_stream_safe(current_analysis)
+        timings["replay"] = _elapsed_ms(stage)
+        timings["total"] = _elapsed_ms(started)
+        logger.info(f"Analysis timings: {timings}")
 
         yield {
             "type": "analysis_complete",
@@ -769,6 +820,7 @@ class AnalysisOrchestrator:
                 "num_sources": len(all_sources),
                 "source_credibility": source_credibility,
                 **SemanticCacheService.hit_metadata(cache_hit),
+                "timings_ms": timings,
             },
         }
 
@@ -942,7 +994,12 @@ class AnalysisOrchestrator:
             context_messages = [msg for msg in reversed(context_messages) if msg.id != user_message.id][-10:]
 
             sources = [source for search in analysis.searches or [] for source in search.sources or []]
-            action, argument = await self._route_followup(claim, analysis, sources, context_messages, message_content)
+            if settings.MULTITURN_ENABLED:
+                action, argument = await self._route_followup(
+                    claim, analysis, sources, context_messages, message_content
+                )
+            else:
+                action, argument = FOLLOWUP_ANSWER, ""
             yield {"type": "router_decision", "content": action}
 
             if action == FOLLOWUP_SEARCH:
