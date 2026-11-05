@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     SEMANTIC_CACHE_ENABLED: bool = True
     # Clarifying questions before a check and the follow-up router after it
     MULTITURN_ENABLED: bool = True
+    # Per-user limits on routes that call the LLM; 0 turns a limit off, e.g. for a benchmark run
+    LLM_RATE_LIMIT_PER_MINUTE: int = 30
+    LLM_RATE_LIMIT_PER_DAY: int = 500
+    LLM_MAX_OUTPUT_TOKENS: int = 4096
+    # Comma-separated Auth0 ids allowed to edit domain credibility; empty means nobody
+    ADMIN_AUTH0_IDS: str = ""
     SEMCACHE_EMBEDDING_MODEL: str = "text-multilingual-embedding-002"
     SEMCACHE_EMBEDDING_LOCATION: str = "us-central1"
     # Similarity only proposes candidates (top K above T_RECALL); the NLI verifier decides reuse.

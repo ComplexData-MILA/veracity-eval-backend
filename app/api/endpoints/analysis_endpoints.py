@@ -20,7 +20,8 @@ from app.core.scoring import get_percentile
 from app.core.utils.domain_preferences import normalize_preferred_domains
 from app.models.domain.user import User
 from app.schemas.analysis_schema import AnalysisRead
-from app.services.analysis_orchestrator import AnalysisOrchestrator
+from app.core.rate_limit import enforce_llm_rate_limit
+from app.services.analysis_orchestrator import STREAM_ERROR, AnalysisOrchestrator
 from app.services.analysis_service import AnalysisService
 from app.services.claim_service import ClaimService
 
@@ -70,6 +71,7 @@ async def stream_claim_analysis(
     claim_service: ClaimService = Depends(get_claim_service),
 ) -> StreamingResponse:
     """Stream the analysis process for a claim in real-time."""
+    enforce_llm_rate_limit(current_user.id)
     try:
         preferred_domains = normalize_preferred_domains(preferred_domains)
     except ValueError as exc:
@@ -98,7 +100,7 @@ async def stream_claim_analysis(
 
             except Exception as e:
                 logger.error(f"Error in analysis stream: {str(e)}", exc_info=True)
-                yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': STREAM_ERROR})}\n\n"
             finally:
                 await session.close()
                 yield "data: [DONE]\n\n"
@@ -133,6 +135,7 @@ async def stream_claim_analysis_exp(
     claim_service: ClaimService = Depends(get_claim_service),
 ) -> StreamingResponse:
     """Stream the analysis process for a claim in real-time."""
+    enforce_llm_rate_limit(current_user.id)
     try:
         preferred_domains = normalize_preferred_domains(preferred_domains)
     except ValueError as exc:
@@ -222,7 +225,7 @@ async def stream_claim_analysis_exp(
 
             except Exception as e:
                 logger.error(f"Error in analysis stream: {str(e)}", exc_info=True)
-                yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': STREAM_ERROR})}\n\n"
             finally:
                 # async def force_cleanup():
                 #     try:

@@ -7,6 +7,7 @@ import aiohttp
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
+from app.core.text_safety import flatten_untrusted
 from app.core.exceptions import ValidationError
 from app.core.utils.domain_preferences import build_domain_query, matches_preferred_domain
 from app.core.utils.url import normalize_domain_name
@@ -186,12 +187,12 @@ class SerperWebSearchService(WebSearchServiceInterface):
             for i, source in enumerate(sources, 1):
                 source_info = [
                     f"Source {i}:",
-                    f"Title: {source.title}",
+                    f"Title: {flatten_untrusted(source.title)}",
                     f"URL: {source.url}",
                     f"Credibility Score: {source.credibility_score:.2f}"
                     if source.credibility_score is not None
                     else "Credibility Score: N/A",
-                    f"Excerpt: {source.snippet}",
+                    f"Excerpt: {flatten_untrusted(source.snippet)}",
                 ]
 
                 if hasattr(source, "domain") and source.domain and source.domain.description:
@@ -209,12 +210,12 @@ class SerperWebSearchService(WebSearchServiceInterface):
             for i, source in enumerate(sources, 1):
                 source_info = [
                     f"Source {i}:",
-                    f"Titre: {source.title}",
+                    f"Titre: {flatten_untrusted(source.title)}",
                     f"URL: {source.url}",
                     f"Index de crédibilité: {source.credibility_score:.2f}"
                     if source.credibility_score is not None
                     else "Index de crédibilité: N/A",
-                    f"Extrait: {source.snippet}",
+                    f"Extrait: {flatten_untrusted(source.snippet)}",
                 ]
 
                 if hasattr(source, "domain") and source.domain and source.domain.description:

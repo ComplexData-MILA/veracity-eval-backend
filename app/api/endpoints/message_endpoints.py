@@ -12,7 +12,9 @@ from app.api.dependencies import get_auth_middleware, get_message_service, get_o
 from app.core.auth.auth0_middleware import Auth0Middleware
 from app.models.domain.user import User
 from app.schemas.message_schema import MessageCreate, MessageRead
-from app.services.analysis_orchestrator import AnalysisOrchestrator
+from app.core.rate_limit import enforce_llm_rate_limit
+from app.core.text_safety import clean_unicode_text
+from app.services.analysis_orchestrator import STREAM_ERROR, AnalysisOrchestrator
 from app.services.message_service import MessageService
 from app.core.exceptions import NotAuthorizedException
 
@@ -47,13 +49,14 @@ async def stream_message(
     conversation_id: UUID,
     claim_conversation_id: UUID,
     claim_id: UUID,
-    content: str,
+    content: str = Query(..., min_length=1, max_length=2000),
     auth_middleware: Auth0Middleware = Depends(get_auth_middleware),
     orchestrator: AnalysisOrchestrator = Depends(get_orchestrator_service),
 ) -> StreamingResponse:
     """Stream an interactive response in a claim conversation."""
     try:
         current_user = await auth_middleware.authenticate_request(request=request)
+        enforce_llm_rate_limit(current_user.id)
 
         async def event_generator():
             try:
@@ -62,7 +65,7 @@ async def stream_message(
                     claim_conversation_id=claim_conversation_id,
                     claim_id=claim_id,
                     user_id=current_user.id,
-                    message_content=content,
+                    message_content=clean_unicode_text(content),
                 ):
                     chunk = f"data: {json.dumps(event)}\n\n"
                     yield chunk.encode("utf-8")
@@ -70,7 +73,7 @@ async def stream_message(
 
             except Exception as e:
                 logger.error(f"Error in message stream: {str(e)}", exc_info=True)
-                yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n".encode("utf-8")
+                yield f"data: {json.dumps({'type': 'error', 'content': STREAM_ERROR})}\n\n".encode("utf-8")
             finally:
                 yield b"data: [DONE]\n\n"
 
@@ -87,6 +90,8 @@ async def stream_message(
                 "Access-Control-Allow-Credentials": "true",
             },
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error setting up message stream: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to setup message stream")

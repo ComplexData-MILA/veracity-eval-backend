@@ -1,5 +1,5 @@
 import logging
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import AsyncGenerator
 
@@ -333,6 +333,13 @@ async def get_serper_orchestrator_service(
 
 def get_auth_middleware() -> Auth0Middleware:
     return Auth0Middleware()
+
+
+async def require_admin(request: Request, auth_middleware: Auth0Middleware = Depends(get_auth_middleware)) -> User:
+    user = await get_current_user(request, auth_middleware)
+    if user.auth0_id not in [admin.strip() for admin in settings.ADMIN_AUTH0_IDS.split(",") if admin.strip()]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return user
 
 
 async def get_current_user(request: Request, auth_middleware: Auth0Middleware = Depends(get_auth_middleware)) -> User:

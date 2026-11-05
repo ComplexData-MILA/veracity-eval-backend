@@ -1,5 +1,5 @@
-from pydantic import BaseModel, ConfigDict
-from typing import Optional, List
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal, Optional, List
 from datetime import datetime
 from uuid import UUID
 
@@ -7,9 +7,9 @@ from uuid import UUID
 class ClaimCreate(BaseModel):
     """Schema for creating a claim."""
 
-    claim_text: str
-    context: str
-    language: str = "english"
+    claim_text: str = Field(..., min_length=1, max_length=10000)
+    context: str = Field(..., max_length=10000)
+    language: Literal["english", "french"] = "english"
     batch_user_id: str = None
     batch_post_id: str = None
 

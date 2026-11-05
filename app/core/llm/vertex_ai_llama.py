@@ -72,6 +72,7 @@ class VertexAILlamaProvider(LLMProvider):
             )
 
             self.model_id = settings.LLAMA_MODEL_NAME
+            self.max_output_tokens = settings.LLM_MAX_OUTPUT_TOKENS
             self.safety_settings = {
                 "enabled": True,
                 "llama_guard_settings": {},
@@ -117,6 +118,7 @@ class VertexAILlamaProvider(LLMProvider):
                     model=self.model_id,
                     messages=[{"role": m.role, "content": m.content} for m in messages],
                     temperature=temperature,
+                    max_tokens=self.max_output_tokens,
                     extra_body=self.extra_body,
                 )
                 if response.choices[0].message.content is not None:
@@ -151,11 +153,15 @@ class VertexAILlamaProvider(LLMProvider):
                 model=self.model_id,
                 messages=[{"role": m.role, "content": m.content} for m in messages],
                 temperature=temperature,
+                max_tokens=self.max_output_tokens,
                 stream=True,
                 extra_body=self.extra_body,
             )
 
+            finish_reason = None
             for chunk in response:
+                if chunk.choices and chunk.choices[0].finish_reason:
+                    finish_reason = chunk.choices[0].finish_reason
                 if chunk.choices and chunk.choices[0].delta.content:
                     content = chunk.choices[0].delta.content
                     logger.debug(f"Streaming chunk: {content}")
@@ -163,7 +169,9 @@ class VertexAILlamaProvider(LLMProvider):
                     # Small delay for chunking
                     await asyncio.sleep(0.01)
 
-            yield ResponseChunk(text="", is_complete=True, metadata={"model": self.model_id})
+            yield ResponseChunk(
+                text="", is_complete=True, metadata={"model": self.model_id, "finish_reason": finish_reason}
+            )
 
         except Exception as e:
             logger.error(f"Error in generate_stream: {str(e)}", exc_info=True)

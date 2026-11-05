@@ -10,6 +10,7 @@ from app.schemas.claim_extraction_schema import (
     ClaimExtractionResponse,
     ExtractedStatement,
 )
+from app.core.rate_limit import enforce_llm_rate_limit
 from app.services.claim_extraction_service import ClaimExtractionService
 
 router = APIRouter(prefix="/claims", tags=["claims"])
@@ -33,6 +34,7 @@ async def extract_claims(
     injects no repository and no database session, so it cannot create a claim
     row or count against the monthly claim limit.
     """
+    enforce_llm_rate_limit(current_user.id)
     result = await extraction_service.extract_statements(text=data.text, language=data.language)
 
     return ClaimExtractionResponse(
@@ -57,6 +59,7 @@ async def clarify_claim(
     The client sends the earlier questions and answers back on each call. When the status is "ready", submit
     the returned claim to POST /claims/, with the assumptions as its context. Like /extract, nothing is persisted.
     """
+    enforce_llm_rate_limit(current_user.id)
     result = await extraction_service.clarify(
         text=data.text,
         language=data.language,

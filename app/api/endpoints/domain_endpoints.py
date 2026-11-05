@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from uuid import UUID
-from app.api.dependencies import get_domain_service
+from app.api.dependencies import get_domain_service, require_admin
+from app.models.domain.user import User
 from app.services.domain_service import DomainService
 from app.schemas.domain_schema import DomainCreate, DomainUpdate, DomainRead
 from app.core.utils.url import normalize_domain_name, is_valid_domain
@@ -16,7 +17,9 @@ router = APIRouter(prefix="/domains", tags=["domains"])
     summary="Create new domain",
 )
 async def create_domain(
-    domain: DomainCreate, domain_service: DomainService = Depends(get_domain_service)
+    domain: DomainCreate,
+    _: User = Depends(require_admin),
+    domain_service: DomainService = Depends(get_domain_service),
 ) -> DomainRead:
     try:
         if not is_valid_domain(domain.domain_name):
@@ -67,7 +70,10 @@ async def get_domain(domain_id: UUID, domain_service: DomainService = Depends(ge
 
 @router.patch("/{domain_id}", response_model=DomainRead, summary="Update domain")
 async def update_domain(
-    domain_id: UUID, update_data: DomainUpdate, domain_service: DomainService = Depends(get_domain_service)
+    domain_id: UUID,
+    update_data: DomainUpdate,
+    _: User = Depends(require_admin),
+    domain_service: DomainService = Depends(get_domain_service),
 ) -> DomainRead:
     try:
         domain = await domain_service.update_domain(

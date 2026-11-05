@@ -8,7 +8,7 @@ from app.core.config import settings
 from app.core.llm.interfaces import LLMProvider
 from app.core.llm.messages import Message as LLMMessage
 from app.core.llm.prompts import AnalysisPrompt
-from app.core.text_safety import clean_unicode_text, extract_json_candidate
+from app.core.text_safety import clean_unicode_text, extract_json_candidate, wrap_untrusted
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,7 @@ MIN_STATEMENT_CHARS = 8
 
 CLARIFY_ASK = "ask"
 CLARIFY_READY = "ready"
+CLARIFY_NOT_A_CLAIM = "B"
 # Clarifying questions asked before the claim is fact-checked anyway.
 MAX_CLARIFY_ROUNDS = 2
 MAX_CLARIFY_OPTIONS = 4
@@ -75,15 +76,20 @@ def parse_clarification_response(raw_text: str, original_claim: str, allow_ask: 
         return ClarificationResult(CLARIFY_READY, original_claim)
 
     question = clean_unicode_text(data.get("question") or "").strip()
+    options = _clean_strings(data.get("options"), MAX_CLARIFY_OPTIONS)
     if allow_ask and data.get("status") == CLARIFY_ASK and question:
         return ClarificationResult(
             CLARIFY_ASK,
             original_claim,
             question=question,
-            options=_clean_strings(data.get("options"), MAX_CLARIFY_OPTIONS),
+            options=options,
         )
 
-    claim = clean_unicode_text(data.get("claim") or "").strip()[:MAX_STATEMENT_CHARS] or original_claim
+    claim = clean_unicode_text(data.get("claim") or "").strip()[:MAX_STATEMENT_CHARS]
+    if not claim and data.get("input") == CLARIFY_NOT_A_CLAIM and options:
+        # Asked again with no questions left: a non-claim's options are full claims, so check one over the raw topic.
+        claim = options[0][:MAX_STATEMENT_CHARS]
+    claim = claim or original_claim
     return ClarificationResult(CLARIFY_READY, claim, assumptions=_clean_strings(data.get("assumptions"), 5))
 
 
@@ -238,19 +244,27 @@ class ClaimExtractionService:
 
     def _build_prompt(self, text: str, language: str) -> str:
         template = AnalysisPrompt.EXTRACT_CLAIMS_FR if language == "french" else AnalysisPrompt.EXTRACT_CLAIMS
-        return template.format(text=text)
+        return template.format(text=wrap_untrusted(text))
 
     def _build_clarify_prompt(
         self, claim: str, language: str, turns: List[Tuple[str, Optional[str]]], allow_ask: bool
     ) -> str:
         french = language == "french"
         if french:
-            skipped = "(ignorée : choisissez l'interprétation la plus probable et indiquez-la comme hypothèse)"
+            skipped = (
+                "(ignorée : choisissez l'interprétation la plus probable, ou à défaut l'affirmation la plus courante "
+                "sur le sujet, et indiquez-la comme hypothèse)"
+            )
             ask_rule = "" if allow_ask else 'Vous devez maintenant renvoyer le statut "ready".'
         else:
-            skipped = "(skipped: choose the most likely reading and state it as an assumption)"
+            skipped = (
+                "(skipped: choose the most likely reading, or failing that the most common claim on the subject, "
+                "and state it as an assumption)"
+            )
             ask_rule = "" if allow_ask else 'You must now return status "ready".'
 
         lines = [f"Q: {question}\nA: {answer if answer else skipped}" for question, answer in turns]
         template = AnalysisPrompt.CLARIFY_CLAIM_FR if french else AnalysisPrompt.CLARIFY_CLAIM
-        return template.format(claim=claim, turns="\n".join(lines) or "(none)", ask_rule=ask_rule)
+        return template.format(
+            claim=wrap_untrusted(claim), turns=wrap_untrusted("\n".join(lines) or "(none)"), ask_rule=ask_rule
+        )
