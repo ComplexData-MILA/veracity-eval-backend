@@ -69,7 +69,14 @@ class Settings(BaseSettings):
     # Run the verifier with its vocabulary trimmed to EN/FR pieces (~0.37 GB instead of ~1.27 GB loaded)
     SEMCACHE_VERIFIER_TRIM: bool = True
     SEMCACHE_ENTAIL_T: float = 0.92
-    SEMCACHE_TTL_HOURS: int = 168
+    # false: exact (normalized) matches only; the NLI model is not loaded and paraphrases never reuse a verdict.
+    # Embeddings are still stored, so turning it back on can match entries written meanwhile.
+    SEMCACHE_NLI_ENABLED: bool = True
+    # Oldest entry each path may reuse: interactive UI checks, and POST /claims/batch
+    SEMCACHE_UI_TTL_HOURS: int = 24
+    SEMCACHE_BATCH_TTL_HOURS: int = 168
+    # The oldest entries are deleted once the cache holds this many (~11 KB each with indexes)
+    SEMCACHE_MAX_ENTRIES: int = 50_000
     SEMCACHE_VERDICT_TEMPERATURE: float = 0.2
     SEMCACHE_REPLAY_DELAY_MS: int = 15
 

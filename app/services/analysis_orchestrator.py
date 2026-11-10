@@ -690,16 +690,20 @@ class AnalysisOrchestrator:
         timings = {} if timings is None else timings
         try:
             stage = time.perf_counter()
-            hit = await self._cache.exact_lookup(claim_text, language, cache_key) if cache_policy.read else None
+            hit = (
+                await self._cache.exact_lookup(claim_text, language, cache_key, cache_policy.max_age_hours)
+                if cache_policy.read
+                else None
+            )
             timings["cache_exact"] = _elapsed_ms(stage)
             embedding = None
             if hit is None or settings.SEMANTIC_CACHE_MODE == "shadow":
                 stage = time.perf_counter()
                 embedding = await self._cache.embed(claim_text)
                 timings["cache_embed"] = _elapsed_ms(stage)
-            if hit is None and cache_policy.read:
+            if hit is None and cache_policy.read and settings.SEMCACHE_NLI_ENABLED:
                 stage = time.perf_counter()
-                candidates = await self._cache.candidates(embedding, language, cache_key)
+                candidates = await self._cache.candidates(embedding, language, cache_key, cache_policy.max_age_hours)
                 timings["cache_candidates"] = _elapsed_ms(stage)
                 timings["n_candidates"] = len(candidates)
                 stage = time.perf_counter()
@@ -931,7 +935,7 @@ class AnalysisOrchestrator:
             claim.claim_text,
             claim.context,
             claim.language,
-            cache_policy=SemanticCacheService.policy(eval_mode=eval_mode),
+            cache_policy=SemanticCacheService.policy(eval_mode=eval_mode, batch=True),
         ):
             if chunk["type"] == "analysis_complete":
                 analysis_complete = True

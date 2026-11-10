@@ -1,7 +1,7 @@
 import hashlib
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import List, Optional, Tuple
 from uuid import UUID, uuid4
@@ -25,7 +25,11 @@ logger = logging.getLogger(__name__)
 _embedding_model = None
 
 _ENTRY_COLUMNS = "id, source_analysis_id, claim_text, veracity_score, analysis_text, created_at"
-_LIVE = "language = :language AND params_hash = :params_hash AND expires_at > now() AND NOT invalidated"
+# Freshness is the reader's: a UI check and a batch run accept entries up to different ages
+_LIVE = (
+    "language = :language AND params_hash = :params_hash AND NOT invalidated "
+    "AND created_at > now() - make_interval(hours => :max_age_hours)"
+)
 
 
 def _get_embedding_model():
@@ -52,6 +56,7 @@ def _get_embedding_model():
 class CachePolicy:
     read: bool
     write: bool
+    max_age_hours: int = field(default_factory=lambda: settings.SEMCACHE_UI_TTL_HOURS)
 
 
 @dataclass
@@ -76,11 +81,15 @@ class SemanticCacheService:
         self._verifier = verifier or ClaimVerifier()
 
     @staticmethod
-    def policy(bypass_cache: bool = False, eval_mode: bool = False) -> CachePolicy:
-        """Eval runs never touch the cache; 'Re-check' skips the read but refreshes the entry."""
+    def policy(bypass_cache: bool = False, eval_mode: bool = False, batch: bool = False) -> CachePolicy:
+        """Eval runs never touch the cache; 'Re-check' skips the read but refreshes the entry.
+
+        UI checks reuse entries up to SEMCACHE_UI_TTL_HOURS old, batch runs up to SEMCACHE_BATCH_TTL_HOURS.
+        """
         if eval_mode or not settings.semantic_cache_enabled:
             return CachePolicy(read=False, write=False)
-        return CachePolicy(read=not bypass_cache, write=True)
+        max_age = settings.SEMCACHE_BATCH_TTL_HOURS if batch else settings.SEMCACHE_UI_TTL_HOURS
+        return CachePolicy(read=not bypass_cache, write=True, max_age_hours=max_age)
 
     @staticmethod
     def params_hash(language: str, default: bool, preferred_domains: Optional[List[str]]) -> str:
@@ -123,7 +132,9 @@ class SemanticCacheService:
             entailment=entailment,
         )
 
-    async def exact_lookup(self, claim_text: str, language: str, params_hash: str) -> Optional[CacheHit]:
+    async def exact_lookup(
+        self, claim_text: str, language: str, params_hash: str, max_age_hours: int
+    ) -> Optional[CacheHit]:
         """Same claim up to case, punctuation and whitespace: no embedding or model call needed."""
         row = (
             await self._session.execute(
@@ -131,12 +142,19 @@ class SemanticCacheService:
                     f"SELECT {_ENTRY_COLUMNS} FROM semantic_cache_entries "
                     f"WHERE claim_hash = :claim_hash AND {_LIVE} ORDER BY created_at DESC LIMIT 1"
                 ),
-                {"claim_hash": claim_hash(claim_text), "language": language, "params_hash": params_hash},
+                {
+                    "claim_hash": claim_hash(claim_text),
+                    "language": language,
+                    "params_hash": params_hash,
+                    "max_age_hours": max_age_hours,
+                },
             )
         ).first()
         return self._to_hit(row, TIER_FULL, 1.0, "exact") if row else None
 
-    async def candidates(self, embedding: List[float], language: str, params_hash: str) -> List[Tuple[object, float]]:
+    async def candidates(
+        self, embedding: List[float], language: str, params_hash: str, max_age_hours: int
+    ) -> List[Tuple[object, float]]:
         """Nearest live entries above the recall floor; similarity alone never decides reuse."""
         rows = (
             await self._session.execute(
@@ -154,6 +172,7 @@ class SemanticCacheService:
                     "language": language,
                     "params_hash": params_hash,
                     "top_k": settings.SEMCACHE_TOP_K,
+                    "max_age_hours": max_age_hours,
                 },
             )
         ).all()
@@ -181,10 +200,7 @@ class SemanticCacheService:
         await self._session.rollback()
 
     async def invalidate(self, entry_id: UUID) -> None:
-        await self._session.execute(
-            text("UPDATE semantic_cache_entries SET invalidated = true, updated_at = now() WHERE id = :id"),
-            {"id": entry_id},
-        )
+        await self._session.execute(text("DELETE FROM semantic_cache_entries WHERE id = :id"), {"id": entry_id})
         await self._session.commit()
 
     async def record_hit(self, entry_id: UUID) -> None:
@@ -205,15 +221,16 @@ class SemanticCacheService:
     ) -> None:
         now = datetime.now(UTC)
         key = claim_hash(claim_text)
+        retain = timedelta(hours=max(settings.SEMCACHE_UI_TTL_HOURS, settings.SEMCACHE_BATCH_TTL_HOURS))
         # A fresh run of the same claim supersedes the older entry
         await self._session.execute(
             text(
                 """
-                UPDATE semantic_cache_entries SET invalidated = true, updated_at = :now
+                DELETE FROM semantic_cache_entries
                 WHERE claim_hash = :claim_hash AND language = :language AND params_hash = :params_hash
                 """
             ),
-            {"now": now, "claim_hash": key, "language": language, "params_hash": params_hash},
+            {"claim_hash": key, "language": language, "params_hash": params_hash},
         )
         await self._session.execute(
             text(
@@ -236,9 +253,23 @@ class SemanticCacheService:
                 "analysis_id": analysis_id,
                 "veracity_score": veracity_score,
                 "analysis_text": analysis_text,
-                "expires_at": now + timedelta(hours=settings.SEMCACHE_TTL_HOURS),
+                "expires_at": now + retain,
                 "now": now,
             },
+        )
+        # Drop entries too old for any path, then the oldest beyond the size cap
+        await self._session.execute(
+            text("DELETE FROM semantic_cache_entries WHERE created_at < :oldest"), {"oldest": now - retain}
+        )
+        await self._session.execute(
+            text(
+                """
+                DELETE FROM semantic_cache_entries WHERE id IN (
+                    SELECT id FROM semantic_cache_entries ORDER BY created_at DESC OFFSET :max_entries
+                )
+                """
+            ),
+            {"max_entries": settings.SEMCACHE_MAX_ENTRIES},
         )
         await self._session.commit()
 
