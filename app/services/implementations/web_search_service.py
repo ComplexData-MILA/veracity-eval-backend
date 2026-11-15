@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import UTC, datetime
 from typing import List, Optional
 from uuid import UUID, uuid4
@@ -114,6 +115,7 @@ class GoogleWebSearchService(WebSearchServiceInterface):
             )
 
             sources = []
+            started = time.perf_counter()
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.search_endpoint, params=params) as response:
                     if response.status != 200:
@@ -122,6 +124,7 @@ class GoogleWebSearchService(WebSearchServiceInterface):
                         return []
 
                     data = await response.json()
+                    provider_ms = round((time.perf_counter() - started) * 1000)
                     if "items" not in data:
                         logger.warning("No search results found")
                         return []
@@ -170,6 +173,11 @@ class GoogleWebSearchService(WebSearchServiceInterface):
                             logger.error(f"Error processing search result: {str(e)}", exc_info=True)
                             continue
 
+            total_ms = round((time.perf_counter() - started) * 1000)
+            logger.info(
+                f"Web search timings: provider=google provider_ms={provider_ms} "
+                f"sources_ms={total_ms - provider_ms} sources={len(sources)}"
+            )
             return sources
 
         except Exception as e:

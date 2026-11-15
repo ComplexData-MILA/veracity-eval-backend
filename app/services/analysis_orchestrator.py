@@ -86,6 +86,11 @@ def _elapsed_ms(start: float) -> int:
     return round((time.perf_counter() - start) * 1000)
 
 
+def _add_elapsed(timings: Dict[str, int], stage: str, start: float) -> None:
+    """Accumulate a stage that runs more than once, e.g. one LLM call per search turn."""
+    timings[stage] = timings.get(stage, 0) + _elapsed_ms(start)
+
+
 def parse_followup_route(raw_text: str) -> tuple[str, str]:
     """Return (action, argument), where the argument is the search query or the revised claim.
 
@@ -177,6 +182,7 @@ class AnalysisOrchestrator:
             current_analysis = await self._analysis_repo.create(initial_analysis)
 
             await self._analysis_repo._session.commit()
+            timings["setup"] = _elapsed_ms(started)
 
             yield {"type": "status", "content": "Searching for relevant sources..."}
 
@@ -205,7 +211,9 @@ class AnalysisOrchestrator:
 
                 await self._analysis_repo._session.rollback()
 
+                turn_start = time.perf_counter()
                 response = await self._llm.generate_response(messages)
+                _add_elapsed(timings, "planner_llm", turn_start)
                 timings["llm_turns"] += 1
 
                 main_agent_message = response.text
@@ -220,6 +228,7 @@ class AnalysisOrchestrator:
 
                 search_request_match = self._extract_search_query_or_none(main_agent_message, language)
                 if search_request_match is not None:
+                    search_start = time.perf_counter()
                     initial_search = Search(
                         id=uuid4(),
                         analysis_id=current_analysis.id,
@@ -241,6 +250,8 @@ class AnalysisOrchestrator:
 
                     all_sources += sources
                     timings["searches"] += 1
+                    # Provider call plus saving the sources; the split is logged as "Web search timings"
+                    _add_elapsed(timings, "web_search", search_start)
 
                     await self._analysis_repo._session.rollback()
 
@@ -389,7 +400,9 @@ class AnalysisOrchestrator:
                             log_data = LogProbsData(tokens=analysis_text, probs=log_probs)
                             current_analysis.log_probs = log_data
 
+                        stage = time.perf_counter()
                         updated_analysis = await self._analysis_repo.update_stream_safe(current_analysis)
+                        timings["save"] = _elapsed_ms(stage)
 
                         evidence = [f"{source.title} {source.snippet}" for source in all_sources]
                         if looks_like_injection(claim_text, *evidence):
@@ -888,6 +901,7 @@ class AnalysisOrchestrator:
             ):
                 if chunk["type"] == "analysis_complete":
                     analysis_complete = True
+                    stage = time.perf_counter()
                     # Get the full analysis to create conversation
                     analysis = await self._analysis_repo.get(UUID(chunk["content"]["analysis_id"]))
 
@@ -903,6 +917,8 @@ class AnalysisOrchestrator:
                     # Add conversation IDs to the response
                     chunk["content"]["conversation_id"] = str(conversation_ids["conversation_id"])
                     chunk["content"]["claim_conversation_id"] = str(conversation_ids["claim_conversation_id"])
+                    # Runs after the verdict but before the client sees analysis_complete
+                    chunk["content"].setdefault("timings_ms", {})["conversation_init"] = _elapsed_ms(stage)
 
                 yield chunk
 
@@ -977,6 +993,9 @@ class AnalysisOrchestrator:
         Each follow-up is routed first: answer from the gathered sources, run one extra search, or propose
         re-checking a revised claim (emitted as `recheck_proposed`; the client submits it via POST /claims/).
         """
+        started = time.perf_counter()
+        # Per-stage durations, sent with message_complete
+        timings: Dict[str, int] = {}
         try:
             # First verify the conversation belongs to the user
             conversation = await self._conversation_repo.get(conversation_id)
@@ -1021,16 +1040,21 @@ class AnalysisOrchestrator:
             context_messages = [msg for msg in reversed(context_messages) if msg.id != user_message.id][-10:]
 
             sources = [source for search in analysis.searches or [] for source in search.sources or []]
+            timings["context_load"] = _elapsed_ms(started)
+            stage = time.perf_counter()
             if settings.MULTITURN_ENABLED:
                 action, argument = await self._route_followup(
                     claim, analysis, sources, context_messages, message_content
                 )
             else:
                 action, argument = FOLLOWUP_ANSWER, ""
+            timings["router"] = _elapsed_ms(stage)
             yield {"type": "router_decision", "content": action}
 
             if action == FOLLOWUP_SEARCH:
+                stage = time.perf_counter()
                 sources = sources + await self._followup_search(analysis.id, argument, claim.language)
+                timings["web_search"] = _elapsed_ms(stage)
             elif action == FOLLOWUP_RECHECK:
                 yield {"type": "recheck_proposed", "content": {"claim_text": argument}}
 
@@ -1087,15 +1111,20 @@ class AnalysisOrchestrator:
             llm_messages.insert(0, LLMMessage(role="system", content=system_context))
 
             response_content = []
+            stage = time.perf_counter()
             async for text in self._guarded_reply(llm_messages, canary):
+                timings.setdefault("answer_ttft", _elapsed_ms(stage))
                 response_content.append(text)
                 yield {"type": "content", "content": text, "message_id": str(bot_message.id)}
+            timings["answer"] = _elapsed_ms(stage)
 
             # Update bot message with complete response when done
             bot_message.content = "".join(response_content)
             await self._message_repo.update(bot_message)
+            timings["total"] = _elapsed_ms(started)
+            logger.info(f"Follow-up timings: route={action} {timings}")
 
-            yield {"type": "message_complete", "message_id": str(bot_message.id)}
+            yield {"type": "message_complete", "message_id": str(bot_message.id), "timings_ms": timings}
 
         except Exception as e:
             logger.error(f"Error in stream_claim_discussion: {str(e)}", exc_info=True)

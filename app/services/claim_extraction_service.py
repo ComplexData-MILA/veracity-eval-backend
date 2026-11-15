@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
@@ -217,13 +218,19 @@ class ClaimExtractionService:
         allow_ask = len(turns) < MAX_CLARIFY_ROUNDS and all(answer for _, answer in turns)
         messages = [LLMMessage(role="user", content=self._build_clarify_prompt(claim, language, turns, allow_ask))]
 
+        started = time.perf_counter()
         try:
             response = await self._llm.generate_response(messages, temperature=0.0)
         except Exception:
             logger.exception("Claim clarification LLM call failed")
             return ClarificationResult(CLARIFY_READY, claim)
 
-        return parse_clarification_response(getattr(response, "text", "") or "", claim, allow_ask)
+        result = parse_clarification_response(getattr(response, "text", "") or "", claim, allow_ask)
+        logger.info(
+            f"Clarify timings: llm_ms={round((time.perf_counter() - started) * 1000)} "
+            f"round={len(turns) + 1} status={result.status}"
+        )
+        return result
 
     def _prepare(self, text: str) -> Tuple[str, Optional[str]]:
         """Clean the input, or return the reason it cannot be processed."""

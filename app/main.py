@@ -3,10 +3,11 @@
 # from app.db.session import AsyncSessionLocal
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import router
@@ -83,3 +84,15 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/v1")
+
+
+@app.middleware("http")
+async def server_timing(request: Request, call_next):
+    """Time to response headers: the whole request, or for a stream its setup (auth, loading the claim)."""
+    started = time.perf_counter()
+    response = await call_next(request)
+    elapsed = (time.perf_counter() - started) * 1000
+    response.headers["Server-Timing"] = f"app;dur={elapsed:.1f}"
+    if request.url.path != "/v1/health":
+        logging.info(f"Request timings: {request.method} {request.url.path} {response.status_code} ms={elapsed:.0f}")
+    return response

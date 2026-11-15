@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import UTC, datetime
 from typing import List, Optional
 from uuid import UUID, uuid4
@@ -86,6 +87,7 @@ class SerperWebSearchService(WebSearchServiceInterface):
                 payload["hl"] = "fr"
 
             sources = []
+            started = time.perf_counter()
             headers = {"X-API-KEY": self.api_key, "Content-Type": "application/json"}
 
             async with aiohttp.ClientSession() as session:
@@ -96,6 +98,7 @@ class SerperWebSearchService(WebSearchServiceInterface):
                         return []
 
                     data = await response.json()
+                    provider_ms = round((time.perf_counter() - started) * 1000)
                     if "organic" not in data:
                         logger.warning("No search results found")
                         return []
@@ -135,6 +138,11 @@ class SerperWebSearchService(WebSearchServiceInterface):
                             continue
             await self.source_repository._session.commit()
 
+            total_ms = round((time.perf_counter() - started) * 1000)
+            logger.info(
+                f"Web search timings: provider=serper provider_ms={provider_ms} "
+                f"sources_ms={total_ms - provider_ms} sources={len(sources)}"
+            )
             return sources
 
         except Exception as e:
