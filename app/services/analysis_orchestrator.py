@@ -44,11 +44,13 @@ from app.repositories.implementations.message_repository import MessageRepositor
 from app.repositories.implementations.search_repository import SearchRepository
 from app.repositories.implementations.source_repository import SourceRepository
 from app.services.interfaces.web_search_service import WebSearchServiceInterface
+from app.services import claim_decomposition
 from app.services.claim_matching import TIER_FULL
 from app.services.semantic_cache_service import (
     CacheHit,
     CachePolicy,
     SemanticCacheService,
+    SubclaimHit,
     split_for_replay,
 )
 
@@ -74,6 +76,8 @@ FOLLOWUP_ANSWER = "answer"
 FOLLOWUP_SEARCH = "search"
 FOLLOWUP_RECHECK = "recheck"
 FOLLOWUP_SEARCH_SUMMARY = "followup"
+# Searches run for one decomposed subclaim, before the planner loop
+SUBCLAIM_SEARCH_SUMMARY = "subclaim"
 FOLLOWUP_REFUSAL = "Sorry, I can't help with that. I can help you understand this fact-check."
 STREAM_ERROR = "Sorry, something went wrong. Please try again."
 CONTENT_FILTER_REASONS = ("content_filter", "content_filtered")
@@ -205,6 +209,13 @@ class AnalysisOrchestrator:
                 # Evidence tier: skip the search loop and give the verdict step the cached sources
                 messages = self._cached_evidence_messages(query, language, all_sources)
 
+            subclaims, subclaim_entries = None, []
+            if settings.CLAIM_DECOMPOSITION_ENABLED and not cache_hit:
+                # Atomic subclaims, each with its own (possibly cached) search; the planner can still search more
+                subclaims, messages, all_sources, subclaim_entries = await self._subclaim_evidence(
+                    claim_text, query, language, current_analysis.id, preferred_domains, cache_policy, timings
+                )
+
             stage = time.perf_counter()
             timings["llm_turns"] = timings["searches"] = 0
             for turns in range(0 if cache_hit else MAX_NUM_TURNS):
@@ -250,7 +261,7 @@ class AnalysisOrchestrator:
 
                     all_sources += sources
                     timings["searches"] += 1
-                    # Provider call plus saving the sources; the split is logged as "Web search timings"
+                    # Provider call plus saving the sources; logged separately as "Web search timings" / "Web search sources"
                     _add_elapsed(timings, "web_search", search_start)
 
                     await self._analysis_repo._session.rollback()
@@ -326,9 +337,13 @@ class AnalysisOrchestrator:
 
             if language == "english":
                 prompt = AnalysisPrompt.GET_VERACITY_EX if not default else AnalysisPrompt.GET_VERACITY
-                messages += [LLMMessage(role="user", content=prompt)]
+                messages += [LLMMessage(role="user", content=prompt + self._subclaim_rules(subclaims, language))]
             elif language == "french":
-                messages += [LLMMessage(role="user", content=AnalysisPrompt.GET_VERACITY_FR)]
+                messages += [
+                    LLMMessage(
+                        role="user", content=AnalysisPrompt.GET_VERACITY_FR + self._subclaim_rules(subclaims, language)
+                    )
+                ]
 
             analysis_text = []
             log_probs = []
@@ -412,6 +427,10 @@ class AnalysisOrchestrator:
                             stage = time.perf_counter()
                             await self._cache_store(cache_embedding, claim_text, language, cache_key, updated_analysis)
                             timings["cache_store"] = _elapsed_ms(stage)
+                        if subclaim_entries:
+                            stage = time.perf_counter()
+                            await self._subclaim_store(subclaim_entries, language, preferred_domains)
+                            timings["subclaim_store"] = _elapsed_ms(stage)
                         timings["total"] = _elapsed_ms(started)
                         logger.info(f"Analysis timings: {timings}")
 
@@ -423,6 +442,7 @@ class AnalysisOrchestrator:
                                 "num_sources": len(all_sources),
                                 "source_credibility": source_credibility,
                                 **SemanticCacheService.hit_metadata(cache_hit),
+                                **({"subclaims": subclaims} if subclaims else {}),
                                 "timings_ms": timings,
                             },
                         }
@@ -698,7 +718,7 @@ class AnalysisOrchestrator:
         Exact (normalized) matches skip the embedding call; otherwise pgvector proposes candidates and the
         NLI verifier decides. Cache failures never fail the analysis.
         """
-        if not self._cache or not cache_policy or not cache_policy.write:
+        if not self._cache or not cache_policy or not cache_policy.write or not cache_policy.claim:
             return None, None
         timings = {} if timings is None else timings
         try:
@@ -714,7 +734,7 @@ class AnalysisOrchestrator:
                 stage = time.perf_counter()
                 embedding = await self._cache.embed(claim_text)
                 timings["cache_embed"] = _elapsed_ms(stage)
-            if hit is None and cache_policy.read and settings.SEMCACHE_NLI_ENABLED:
+            if hit is None and cache_policy.read and cache_policy.claim_nli and settings.SEMCACHE_NLI_ENABLED:
                 stage = time.perf_counter()
                 candidates = await self._cache.candidates(embedding, language, cache_key, cache_policy.max_age_hours)
                 timings["cache_candidates"] = _elapsed_ms(stage)
@@ -789,34 +809,165 @@ class AnalysisOrchestrator:
         for cached_search in cached.searches or []:
             if cached_search.summary == FOLLOWUP_SEARCH_SUMMARY:
                 continue  # found in follow-up chat, not evidence for the cached verdict
-            search = await self._search_repo.create(
-                Search(
+            all_sources += await self._clone_search(
+                cached_search.prompt, cached_search.summary, cached_search.sources or [], analysis_id
+            )
+        await self._search_repo._session.commit()
+        return all_sources
+
+    async def _clone_search(
+        self, prompt: str, summary: Optional[str], cached_sources: List[Any], analysis_id: UUID
+    ) -> List[SourceModel]:
+        """Copy one cached search and its sources under `analysis_id`; the caller commits."""
+        search = await self._search_repo.create(
+            Search(
+                id=uuid4(),
+                analysis_id=analysis_id,
+                prompt=prompt,
+                summary=summary,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+        )
+        sources = []
+        for cached_source in cached_sources:
+            source = await self._source_repo.create_with_domain(
+                SourceModel(
                     id=uuid4(),
-                    analysis_id=analysis_id,
-                    prompt=cached_search.prompt,
-                    summary=cached_search.summary,
+                    search_id=search.id,
+                    url=cached_source.url,
+                    title=cached_source.title,
+                    snippet=cached_source.snippet,
+                    domain_id=cached_source.domain_id,
+                    content=cached_source.content,
+                    credibility_score=cached_source.credibility_score,
                     created_at=datetime.now(UTC),
                     updated_at=datetime.now(UTC),
                 )
             )
-            for cached_source in cached_search.sources or []:
-                source = await self._source_repo.create_with_domain(
-                    SourceModel(
+            sources.append(source)
+        return sources
+
+    async def _subclaim_evidence(
+        self,
+        claim_text: str,
+        query: str,
+        language: str,
+        analysis_id: UUID,
+        preferred_domains: Optional[List[str]],
+        cache_policy: Optional[CachePolicy],
+        timings: Dict[str, int],
+    ) -> tuple[List[str], List[LLMMessage], List[SourceModel], List[tuple]]:
+        """Decompose the claim, then reuse each subclaim's cached search or run a new one.
+
+        Returns the subclaims, the first planner message seeded with each subclaim's evidence, all sources, and
+        (subclaim, embedding, search_id, sources) for the fresh searches that should be cached after the verdict.
+        """
+        await self._analysis_repo._session.rollback()
+        stage = time.perf_counter()
+        subclaims = await claim_decomposition.decompose(claim_text)
+        timings["decompose"] = _elapsed_ms(stage)
+        timings["n_subclaims"] = len(subclaims)
+
+        hits: List[Optional[SubclaimHit]] = [None] * len(subclaims)
+        embeddings = None
+        if self._cache and cache_policy and cache_policy.write and settings.SUBCLAIM_CACHE_ENABLED:
+            stage = time.perf_counter()
+            try:
+                embeddings = await self._cache.embed_many(subclaims)
+                if cache_policy.read:
+                    params_hash = self._subclaim_params_hash(language, preferred_domains)
+                    hits = await self._cache.subclaim_lookup(
+                        subclaims, embeddings, language, params_hash, cache_policy.max_age_hours
+                    )
+            except Exception as e:
+                logger.error(f"Subclaim cache lookup failed, searching every subclaim: {str(e)}", exc_info=True)
+                await self._cache.rollback()
+                embeddings, hits = None, [None] * len(subclaims)
+            timings["subclaim_lookup"] = _elapsed_ms(stage)
+        timings["subclaim_cache_hits"] = sum(1 for hit in hits if hit)
+        timings["subclaim_searches"] = 0
+
+        # The provider calls for every miss run at once; saving their sources shares the DB session, so it doesn't
+        misses = [i for i, hit in enumerate(hits) if not hit]
+        stage = time.perf_counter()
+        fetched = await asyncio.gather(
+            *(self._web_search.fetch_results(subclaims[i], language, preferred_domains) for i in misses),
+            return_exceptions=True,
+        )
+        results = {i: [] if isinstance(items, BaseException) else items for i, items in zip(misses, fetched)}
+        if misses:
+            timings["subclaim_search"] = _elapsed_ms(stage)
+
+        label = "Sub-claim" if language == "english" else "Sous-affirmation"
+        result_label = "Search result" if language == "english" else "Résultat(s) de la recherche sur le Web"
+        blocks, all_sources, entries = [], [], []
+        for i, (subclaim, hit) in enumerate(zip(subclaims, hits)):
+            stage = time.perf_counter()
+            if hit:
+                sources = await self._clone_search(subclaim, SUBCLAIM_SEARCH_SUMMARY, hit.sources, analysis_id)
+                await self._search_repo._session.commit()
+                _add_elapsed(timings, "subclaim_clone", stage)
+            else:
+                search = await self._search_repo.create(
+                    Search(
                         id=uuid4(),
-                        search_id=search.id,
-                        url=cached_source.url,
-                        title=cached_source.title,
-                        snippet=cached_source.snippet,
-                        domain_id=cached_source.domain_id,
-                        content=cached_source.content,
-                        credibility_score=cached_source.credibility_score,
+                        analysis_id=analysis_id,
+                        prompt=subclaim,
+                        summary=SUBCLAIM_SEARCH_SUMMARY,
                         created_at=datetime.now(UTC),
                         updated_at=datetime.now(UTC),
                     )
                 )
-                all_sources.append(source)
-        await self._search_repo._session.commit()
-        return all_sources
+                await self._search_repo._session.commit()
+                sources = await self._web_search.create_sources(results[i], search.id, preferred_domains)
+                timings["subclaim_searches"] += 1
+                _add_elapsed(timings, "subclaim_save", stage)
+                if embeddings is not None and sources:
+                    entries.append((subclaim, embeddings[i], search.id, sources))
+            await self._analysis_repo._session.rollback()
+            all_sources += sources
+            blocks.append(
+                f"{label} {i + 1}: {flatten_untrusted(subclaim)}\n{result_label}: {self._evidence_prompt(sources, language)}"
+            )
+
+        note = (
+            AnalysisPrompt.SUBCLAIM_EVIDENCE_NOTE if language == "english" else AnalysisPrompt.SUBCLAIM_EVIDENCE_NOTE_FR
+        )
+        messages = [LLMMessage(role="user", content=f"{query}\n\n{note}\n\n" + "\n\n".join(blocks))]
+        return subclaims, messages, all_sources, entries
+
+    def _subclaim_params_hash(self, language: str, preferred_domains: Optional[List[str]]) -> str:
+        return SemanticCacheService.subclaim_params_hash(language, preferred_domains, type(self._web_search).__name__)
+
+    @staticmethod
+    def _subclaim_rules(subclaims: Optional[List[str]], language: str) -> str:
+        """Algorithm 1 of CAAFC added to the verdict request; nothing for a claim that was not split."""
+        if not subclaims or len(subclaims) < 2:
+            return ""
+        listed = "\n".join(f"{i}. {flatten_untrusted(s)}" for i, s in enumerate(subclaims, 1))
+        rules = (
+            AnalysisPrompt.SUBCLAIM_VERDICT_RULES if language == "english" else AnalysisPrompt.SUBCLAIM_VERDICT_RULES_FR
+        )
+        return "\n" + rules.format(subclaims=listed)
+
+    async def _subclaim_store(
+        self, entries: List[tuple], language: str, preferred_domains: Optional[List[str]]
+    ) -> None:
+        """Cache freshly searched subclaims, except where the subclaim or its evidence carries injection markers."""
+        safe = []
+        for subclaim, embedding, search_id, sources in entries:
+            if looks_like_injection(subclaim, *[f"{s.title} {s.snippet}" for s in sources]):
+                logger.warning(f"Injection markers in subclaim evidence: search {search_id} not cached")
+            else:
+                safe.append((subclaim, embedding, search_id))
+        if not safe:
+            return
+        try:
+            await self._cache.store_subclaims(safe, language, self._subclaim_params_hash(language, preferred_domains))
+        except Exception as e:
+            logger.error(f"Subclaim cache store failed: {str(e)}", exc_info=True)
+            await self._cache.rollback()
 
     async def _replay_cached_analysis(
         self,

@@ -18,6 +18,18 @@ class WebSearchServiceInterface(ABC):
         pass
 
     @abstractmethod
+    async def fetch_results(
+        self, claim_text: str, language: str = "english", preferred_domains: list[str] | None = None
+    ) -> List[dict]:
+        """The provider call alone, with no DB access, so it is safe to run concurrently."""
+
+    @abstractmethod
+    async def create_sources(
+        self, items: List[dict], search_id: UUID, preferred_domains: list[str] | None = None
+    ) -> List[SourceModel]:
+        """Save fetched results. This uses the shared DB session, so call it one search at a time."""
+
+    @abstractmethod
     async def _get_existing_source(self, url: str) -> Optional[SourceModel]:
         pass
 

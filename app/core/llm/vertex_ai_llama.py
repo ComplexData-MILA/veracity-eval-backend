@@ -16,8 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 class VertexAILlamaProvider(LLMProvider):
-    def __init__(self, settings):
+    def __init__(self, settings, model_id: str | None = None, location: str | None = None):
         try:
+            location = location or settings.VERTEX_AI_LOCATION
             creds_path = settings.GOOGLE_APPLICATION_CREDENTIALS
             logger.info(f"Loading service account from: {creds_path}")
 
@@ -55,12 +56,12 @@ class VertexAILlamaProvider(LLMProvider):
             self.credentials.refresh(auth_req)
 
             project_path = f"projects/{settings.GOOGLE_CLOUD_PROJECT}"
-            location_path = f"locations/{settings.VERTEX_AI_LOCATION}"
+            location_path = f"locations/{location}"
             # The global endpoint has no region prefix on the host
-            if settings.VERTEX_AI_LOCATION == "global":
+            if location == "global":
                 host = "aiplatform.googleapis.com"
             else:
-                host = f"{settings.VERTEX_AI_LOCATION}-aiplatform.googleapis.com"
+                host = f"{location}-aiplatform.googleapis.com"
             base_url = f"https://{host}/v1/{project_path}/{location_path}/endpoints/openapi"
 
             logger.info(f"Initializing OpenAI client with base URL: {base_url}")
@@ -71,7 +72,7 @@ class VertexAILlamaProvider(LLMProvider):
                 default_headers={"Authorization": f"Bearer {self.credentials.token}"},
             )
 
-            self.model_id = settings.LLAMA_MODEL_NAME
+            self.model_id = model_id or settings.LLAMA_MODEL_NAME
             self.max_output_tokens = settings.LLM_MAX_OUTPUT_TOKENS
             self.safety_settings = {
                 "enabled": True,
@@ -87,7 +88,7 @@ class VertexAILlamaProvider(LLMProvider):
             logger.info("Successfully initialized Vertex AI Llama provider")
             logger.info(f"Model: {self.model_id}")
             logger.info(f"Project: {settings.GOOGLE_CLOUD_PROJECT}")
-            logger.info(f"Location: {settings.VERTEX_AI_LOCATION}")
+            logger.info(f"Location: {location}")
 
         except Exception as e:
             logger.error(f"Failed to initialize Vertex AI Llama provider: {str(e)}", exc_info=True)
@@ -98,9 +99,10 @@ class VertexAILlamaProvider(LLMProvider):
         if not self.credentials.valid:
             auth_req = requests.Request()
             self.credentials.refresh(auth_req)
-            # Update client with new token
-            self.client.api_key = self.credentials.token
-            self.client.default_headers["Authorization"] = f"Bearer {self.credentials.token}"
+            # A client copy with the new token: client.default_headers is a fresh dict on every read, so assigning
+            # into it was lost and long-lived providers kept sending the expired token (401 after about an hour)
+            token = self.credentials.token
+            self.client = self.client.with_options(api_key=token, default_headers={"Authorization": f"Bearer {token}"})
             logger.info("Refreshed access token")
 
     async def generate_response(self, messages: List[Message], temperature: float = 0.7) -> Response:

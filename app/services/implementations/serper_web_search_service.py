@@ -73,6 +73,13 @@ class SerperWebSearchService(WebSearchServiceInterface):
         preferred_domains: list[str] | None = None,
     ) -> List[SourceModel]:
         """Search for sources and create or update records."""
+        items = await self.fetch_results(claim_text, language, preferred_domains)
+        return await self.create_sources(items, search_id, preferred_domains)
+
+    async def fetch_results(
+        self, claim_text: str, language: str = "english", preferred_domains: list[str] | None = None
+    ) -> List[dict]:
+        """The provider call only. It doesn't touch the DB, so several can run at once."""
         try:
             logger.warning("SERPER SOURCE FILTER CODE IS RUNNING")
             payload = {
@@ -86,7 +93,6 @@ class SerperWebSearchService(WebSearchServiceInterface):
             if language == "french":
                 payload["hl"] = "fr"
 
-            sources = []
             started = time.perf_counter()
             headers = {"X-API-KEY": self.api_key, "Content-Type": "application/json"}
 
@@ -98,56 +104,67 @@ class SerperWebSearchService(WebSearchServiceInterface):
                         return []
 
                     data = await response.json()
-                    provider_ms = round((time.perf_counter() - started) * 1000)
-                    if "organic" not in data:
-                        logger.warning("No search results found")
-                        return []
-
-                    for item in data["organic"][:10]:
-                        try:
-                            if not matches_preferred_domain(
-                                item["link"],
-                                preferred_domains,
-                            ):
-                                continue
-                            domain_name = normalize_domain_name(item["link"])
-                            # Blocked platforms are always excluded regardless of credibility score.
-                            if self._is_blocked_domain(domain_name):
-                                logger.info(f"Skipping blocked source domain: {domain_name}")
-                                continue
-
-                            domain, is_new = await self.domain_service.get_or_create_domain(domain_name)
-
-                            if is_new:
-                                logger.info(f"Created new domain record for: {domain_name}")
-                            if not self._has_acceptable_credibility(domain.credibility_score):
-                                logger.info(
-                                    f"Skipping source with zero credibility: "
-                                    f"{domain_name} ({domain.credibility_score})"
-                                )
-                                continue
-                            logger.info(f"Allowing source: {domain_name} " f"(credibility={domain.credibility_score})")
-
-                            source = await self._create_new_source(item, search_id, domain.id, domain.credibility_score)
-                            if source:
-                                sources.append(source)
-                                logger.debug(f"Created new source for URL: {item['link']}")
-
-                        except Exception as e:
-                            logger.error(f"Error processing search result: {str(e)}", exc_info=True)
-                            continue
-            await self.source_repository._session.commit()
-
-            total_ms = round((time.perf_counter() - started) * 1000)
-            logger.info(
-                f"Web search timings: provider=serper provider_ms={provider_ms} "
-                f"sources_ms={total_ms - provider_ms} sources={len(sources)}"
-            )
-            return sources
+            provider_ms = round((time.perf_counter() - started) * 1000)
+            if "organic" not in data:
+                logger.warning("No search results found")
+                return []
+            items = data["organic"][:10]
+            logger.info(f"Web search timings: provider=serper provider_ms={provider_ms} results={len(items)}")
+            return items
 
         except Exception as e:
             logger.error(f"Error performing web search: {str(e)}", exc_info=True)
             return []
+
+    async def create_sources(
+        self, items: List[dict], search_id: UUID, preferred_domains: list[str] | None = None
+    ) -> List[SourceModel]:
+        """Save fetched results as sources. This uses the shared DB session, so call it one search at a time."""
+        sources = []
+        started = time.perf_counter()
+        try:
+            for item in items:
+                try:
+                    if not matches_preferred_domain(
+                        item["link"],
+                        preferred_domains,
+                    ):
+                        continue
+                    domain_name = normalize_domain_name(item["link"])
+                    # Blocked platforms are always excluded regardless of credibility score.
+                    if self._is_blocked_domain(domain_name):
+                        logger.info(f"Skipping blocked source domain: {domain_name}")
+                        continue
+
+                    domain, is_new = await self.domain_service.get_or_create_domain(domain_name)
+
+                    if is_new:
+                        logger.info(f"Created new domain record for: {domain_name}")
+                    if not self._has_acceptable_credibility(domain.credibility_score):
+                        logger.info(
+                            f"Skipping source with zero credibility: " f"{domain_name} ({domain.credibility_score})"
+                        )
+                        continue
+                    logger.info(f"Allowing source: {domain_name} " f"(credibility={domain.credibility_score})")
+
+                    source = await self._create_new_source(item, search_id, domain.id, domain.credibility_score)
+                    if source:
+                        sources.append(source)
+                        logger.debug(f"Created new source for URL: {item['link']}")
+
+                except Exception as e:
+                    logger.error(f"Error processing search result: {str(e)}", exc_info=True)
+                    continue
+            await self.source_repository._session.commit()
+        except Exception as e:
+            logger.error(f"Error saving search results: {str(e)}", exc_info=True)
+            return []
+
+        logger.info(
+            f"Web search sources: provider=serper sources_ms={round((time.perf_counter() - started) * 1000)} "
+            f"sources={len(sources)}"
+        )
+        return sources
 
     async def _get_existing_source(self, url: str) -> Optional[SourceModel]:
         return await self.source_repository.get_by_url(url)

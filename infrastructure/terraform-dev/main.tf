@@ -333,6 +333,12 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
             value = "/app/service-account.json"
           }
 
+          # Interactive checks are cached only as subclaims, so without decomposition they are not cached at all
+          env {
+            name  = "CLAIM_DECOMPOSITION_ENABLED"
+            value = "true"
+          }
+
           volume_mount {
             name       = "service-account-key"
             mount_path = "/app/service-account.json"

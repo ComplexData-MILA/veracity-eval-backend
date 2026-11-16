@@ -46,8 +46,13 @@ async def lifespan(app: FastAPI):
     # user_service = await get_user_service_startup()
     app.state.auth_middleware = Auth0Middleware()
     load_distribution(DISTRIBUTION_FILE)
-    if settings.semantic_cache_enabled and settings.SEMCACHE_NLI_ENABLED:
-        # Load the cache verifier in the background so startup and health checks aren't delayed
+    if (
+        settings.semantic_cache_enabled
+        and settings.SEMCACHE_NLI_ENABLED
+        and settings.CLAIM_DECOMPOSITION_ENABLED
+        and settings.SUBCLAIM_CACHE_ENABLED
+    ):
+        # Only the subclaim cache uses NLI. Load it in the background so startup and health checks aren't delayed
         app.state.verifier_warm_up = asyncio.create_task(ClaimVerifier().warm_up())
     yield
     logging.info("API Shutting down")

@@ -57,6 +57,44 @@ class CachePolicy:
     read: bool
     write: bool
     max_age_hours: int = field(default_factory=lambda: settings.SEMCACHE_UI_TTL_HOURS)
+    # Whole-claim verdict cache: batch runs only. Interactive checks reuse subclaim evidence, never a verdict.
+    claim: bool = False
+    # NLI (paraphrase) matching for whole claims; no path turns it on, so batch reuse is exact-text only
+    claim_nli: bool = False
+
+
+_SUBCLAIM_COLUMNS = "id, subclaim_text, subclaim_hash, search_id, created_at"
+
+
+def is_subclaim_match(subclaim: str, cached: str, entailment: Optional[float]) -> bool:
+    """Reuse a subclaim's evidence only when both assert the same fact; a different number is a different fact."""
+    return (
+        entailment is not None and entailment >= settings.SEMCACHE_ENTAIL_T and not is_number_variant(subclaim, cached)
+    )
+
+
+@dataclass
+class SubclaimHit:
+    entry_id: UUID
+    search_id: UUID
+    subclaim_text: str
+    cached_at: datetime
+    similarity: float
+    reason: str
+    entailment: Optional[float] = None
+    sources: list = field(default_factory=list)
+
+
+def _subclaim_hit(row, similarity: float, reason: str, entailment: Optional[float] = None) -> SubclaimHit:
+    return SubclaimHit(
+        entry_id=row.id,
+        search_id=row.search_id,
+        subclaim_text=row.subclaim_text,
+        cached_at=row.created_at,
+        similarity=similarity,
+        reason=reason,
+        entailment=entailment,
+    )
 
 
 @dataclass
@@ -82,14 +120,15 @@ class SemanticCacheService:
 
     @staticmethod
     def policy(bypass_cache: bool = False, eval_mode: bool = False, batch: bool = False) -> CachePolicy:
-        """Eval runs never touch the cache; 'Re-check' skips the read but refreshes the entry.
+        """Eval runs never touch the cache; 'Re-check' skips the read but refreshes the entries.
 
-        UI checks reuse entries up to SEMCACHE_UI_TTL_HOURS old, batch runs up to SEMCACHE_BATCH_TTL_HOURS.
+        UI checks reuse subclaim evidence up to SEMCACHE_UI_TTL_HOURS old. Batch runs (benchmarks) also replay exact
+        repeats of a whole claim, and reuse entries up to SEMCACHE_BATCH_TTL_HOURS old.
         """
         if eval_mode or not settings.semantic_cache_enabled:
             return CachePolicy(read=False, write=False)
         max_age = settings.SEMCACHE_BATCH_TTL_HOURS if batch else settings.SEMCACHE_UI_TTL_HOURS
-        return CachePolicy(read=not bypass_cache, write=True, max_age_hours=max_age)
+        return CachePolicy(read=not bypass_cache, write=True, max_age_hours=max_age, claim=batch)
 
     @staticmethod
     def params_hash(language: str, default: bool, preferred_domains: Optional[List[str]]) -> str:
@@ -101,6 +140,16 @@ class SemanticCacheService:
             AnalysisPrompt.GET_VERACITY_EX,
             AnalysisPrompt.GET_VERACITY_FR,
         ]
+        if settings.CLAIM_DECOMPOSITION_ENABLED:
+            # Kept out of the hash when off, so turning the feature on never invalidates today's entries
+            prompts += [
+                settings.DECOMPOSE_MODEL_NAME,
+                AnalysisPrompt.DECOMPOSE_CLAIM,
+                AnalysisPrompt.SUBCLAIM_EVIDENCE_NOTE,
+                AnalysisPrompt.SUBCLAIM_EVIDENCE_NOTE_FR,
+                AnalysisPrompt.SUBCLAIM_VERDICT_RULES,
+                AnalysisPrompt.SUBCLAIM_VERDICT_RULES_FR,
+            ]
         payload = {
             "language": language,
             "default": default,
@@ -270,6 +319,154 @@ class SemanticCacheService:
                 """
             ),
             {"max_entries": settings.SEMCACHE_MAX_ENTRIES},
+        )
+        await self._session.commit()
+
+    # ---------- subclaim cache: one entry per atomic subclaim, pointing at the search that gathered its evidence ----------
+
+    @staticmethod
+    def subclaim_params_hash(language: str, preferred_domains: Optional[List[str]], search_provider: str) -> str:
+        """Only what changes the evidence a search returns; LLM and prompt changes keep cached evidence usable."""
+        payload = {
+            "language": language,
+            "preferred_domains": sorted(preferred_domains or []),
+            "search_provider": search_provider,
+            "embedding_model": settings.SEMCACHE_EMBEDDING_MODEL,
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+    async def embed_many(self, texts: List[str]) -> List[List[float]]:
+        from vertexai.language_models import TextEmbeddingInput
+
+        model = _get_embedding_model()
+        result = await model.get_embeddings_async([TextEmbeddingInput(t, "SEMANTIC_SIMILARITY") for t in texts])
+        return [r.values for r in result]
+
+    async def subclaim_lookup(
+        self, texts: List[str], embeddings: List[List[float]], language: str, params_hash: str, max_age_hours: int
+    ) -> List[Optional[SubclaimHit]]:
+        """A cached entry per subclaim when one asserts the same thing, with its sources; None where there is none."""
+        params = {"language": language, "params_hash": params_hash, "max_age_hours": max_age_hours}
+        rows = (
+            await self._session.execute(
+                text(
+                    f"SELECT {_SUBCLAIM_COLUMNS} FROM subclaim_cache_entries "
+                    f"WHERE subclaim_hash = ANY(:hashes) AND {_LIVE} ORDER BY created_at DESC"
+                ),
+                {**params, "hashes": [claim_hash(t) for t in texts]},
+            )
+        ).all()
+        by_hash = {}
+        for row in rows:
+            by_hash.setdefault(row.subclaim_hash, row)
+        hits: List[Optional[SubclaimHit]] = [
+            _subclaim_hit(by_hash[claim_hash(t)], 1.0, "exact") if claim_hash(t) in by_hash else None for t in texts
+        ]
+
+        if settings.SEMCACHE_NLI_ENABLED:
+            candidates = []
+            for i, embedding in enumerate(embeddings):
+                if hits[i] is not None:
+                    continue
+                rows = (
+                    await self._session.execute(
+                        text(
+                            f"""
+                            SELECT {_SUBCLAIM_COLUMNS}, 1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
+                            FROM subclaim_cache_entries
+                            WHERE {_LIVE}
+                            ORDER BY embedding <=> CAST(:embedding AS vector), created_at DESC
+                            LIMIT :top_k
+                            """
+                        ),
+                        {**params, "embedding": str(embedding), "top_k": settings.SEMCACHE_TOP_K},
+                    )
+                ).all()
+                candidates += [(i, row) for row in rows if row.similarity >= settings.SEMCACHE_T_RECALL]
+            if candidates:
+                # One verifier pass over every subclaim's candidates
+                scores = await self._verifier.mutual_entailment(
+                    [(texts[i], row.subclaim_text) for i, row in candidates]
+                )
+                for (i, row), entailment in zip(candidates, scores):
+                    reuse = is_subclaim_match(texts[i], row.subclaim_text, entailment)
+                    logger.info(
+                        f"Subclaim cache candidate: similarity={row.similarity:.4f} entailment={entailment:.4f} "
+                        f"reuse={reuse}"
+                    )
+                    if reuse and hits[i] is None:
+                        hits[i] = _subclaim_hit(row, row.similarity, "mutual-entailment", entailment)
+
+        found = [hit for hit in hits if hit is not None]
+        if found:
+            sources = (
+                await self._session.execute(
+                    text(
+                        "SELECT search_id, url, title, snippet, domain_id, content, credibility_score FROM sources "
+                        "WHERE search_id = ANY(:search_ids) ORDER BY created_at, id"
+                    ),
+                    {"search_ids": [hit.search_id for hit in found]},
+                )
+            ).all()
+            for hit in found:
+                hit.sources = [source for source in sources if source.search_id == hit.search_id]
+            await self._session.execute(
+                text("UPDATE subclaim_cache_entries SET hit_count = hit_count + 1 WHERE id = ANY(:ids)"),
+                {"ids": [hit.entry_id for hit in found]},
+            )
+            await self._session.commit()
+        return hits
+
+    async def store_subclaims(
+        self, entries: List[Tuple[str, List[float], UUID]], language: str, params_hash: str
+    ) -> None:
+        """Store (subclaim, embedding, search_id) entries; a fresh search of the same subclaim supersedes the old one."""
+        now = datetime.now(UTC)
+        retain = timedelta(hours=max(settings.SEMCACHE_UI_TTL_HOURS, settings.SEMCACHE_BATCH_TTL_HOURS))
+        for subclaim, embedding, search_id in entries:
+            key = claim_hash(subclaim)
+            await self._session.execute(
+                text(
+                    "DELETE FROM subclaim_cache_entries "
+                    "WHERE subclaim_hash = :subclaim_hash AND language = :language AND params_hash = :params_hash"
+                ),
+                {"subclaim_hash": key, "language": language, "params_hash": params_hash},
+            )
+            await self._session.execute(
+                text(
+                    """
+                    INSERT INTO subclaim_cache_entries
+                        (id, subclaim_text, subclaim_hash, language, params_hash, embedding, search_id,
+                         expires_at, created_at, updated_at)
+                    VALUES
+                        (:id, :subclaim_text, :subclaim_hash, :language, :params_hash, CAST(:embedding AS vector),
+                         :search_id, :expires_at, :now, :now)
+                    """
+                ),
+                {
+                    "id": uuid4(),
+                    "subclaim_text": subclaim,
+                    "subclaim_hash": key,
+                    "language": language,
+                    "params_hash": params_hash,
+                    "embedding": str(embedding),
+                    "search_id": search_id,
+                    "expires_at": now + retain,
+                    "now": now,
+                },
+            )
+        await self._session.execute(
+            text("DELETE FROM subclaim_cache_entries WHERE created_at < :oldest"), {"oldest": now - retain}
+        )
+        await self._session.execute(
+            text(
+                """
+                DELETE FROM subclaim_cache_entries WHERE id IN (
+                    SELECT id FROM subclaim_cache_entries ORDER BY created_at DESC OFFSET :max_entries
+                )
+                """
+            ),
+            {"max_entries": settings.SUBCLAIM_CACHE_MAX_ENTRIES},
         )
         await self._session.commit()
 

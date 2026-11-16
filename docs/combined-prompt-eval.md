@@ -105,6 +105,143 @@ Share of calls with any problem; every one failed open (no crash, no lost check)
 
 The malformed JSON was a missing or extra brace in the combined prompt. The live clarifier's two failures were replies containing several JSON objects. JSON mode removed the malformed output entirely. Excluding the harmful-input issue, C2's rate is 0.3%.
 
+## Round 2: a compact prompt (2026-11-13)
+
+**Goal:** make the combined prompt shorter without losing performance.
+- **Candidates** are in [candidate_prompts.py](../tests/eval/candidate_prompts.py). All are system prompts with JSON mode.
+- **The user message** is the same for every candidate: date, input and answers fenced as data, and the question-limit line.
+- **Inputs** are the same 63, with 3 repetitions each. C2 was re-run on the same day as the reference.
+
+| | C2 (round 1) | U1 (proposed draft) | U2 (compact) | U3 | **U4 / U5** |
+|---|---|---|---|---|---|
+| Prompt size (chars) | 5,356 | 2,648 | 2,837 | 3,104 | **3,218** |
+| LLM time before first search, all inputs p50 | 1.94 s | 2.60 s | 1.75 s | 1.65 s | **1.64 s** |
+| Calls per input | 1.76 | 2.32 | 1.67 | 1.67 | **1.69** |
+| Asked on clear claims (incl. held-out) | 20% | 80% | 17% | 3% | **3%** |
+| Asked on yes/no questions | 33% | 100% | 33% | 44% | **33%** |
+| Ambiguous claims: asked / questions | 100% / 1.20 | 100% / 1.97 | 100% / 1.00 | 100% / 1.00 | **100% / 1.00** |
+| Benchmark underspecified: asked | 100% | 100% | 96% | 88% | **96%** |
+| Topics etc. turned into a claim without asking | 0 | 0 | 6 | 0 | **0** |
+| Harmful input got suggested claims | 0 | 6 | 3 | 3 | **0** (enforced in code) |
+| Query keeps the claim's names and numbers | 67% | 55% | 55% | 61% | **61%** |
+| Calls with a problem the model caused | 2.7% | 100% | 3.5% | 0% | **2.5%** (all corrected by code) |
+
+**U1, the proposed draft, fails on four counts:**
+1. It never defines A/B/C, so the class field came back as the literal `"A, B or C"` or the raw input in all 439 calls.
+2. It asks on 80% of clear claims, including myths ("The Earth is flat" → "scientific concept or specific context?").
+3. Its options are vague ("Other", "Unsure").
+4. On topics it brings back the original bug, offering aspects ("origins / causes / symptoms") instead of claims.
+
+Its section 3 (evidence and scoring) has no effect on this call: turn 1 sees no evidence. If its scoring rules are wanted, they belong in `GET_VERACITY`, as a separately evaluated change.
+
+**What each step changed:**
+- **U2** keeps U1's structure and adds the tested rules back as one line each. It's faster, but without examples it sometimes turned topics and opinions into claims on its own ("why covid" → checked "COVID-19 vaccines are safe").
+- **U3** adds one short example per class, "always ask for B", "never suggest claims for C" and a one-letter class field.
+- **U4** adds one line: a change, record or statistic with no place or period needs a question.
+- **A rule in code** blanks options on harmful inputs. The model still sometimes fills them in, so the code enforces it.
+- **U5** is U4 plus a language line in the user message. U4, an English-only prompt, answered French inputs in English, which would hurt French searches. With the line, all 18 French runs stayed in French.
+
+**Recommended candidate: U5.** It's 40% shorter than C2 and slightly faster. On the 63 inputs it matches or beats C2 on every outcome, and asks far fewer needless questions on clear claims.
+
+Still open:
+- **Date drift:** options still sometimes pick the current year ("en 2026").
+- **Query wording:** queries keep a little less of the claim's wording (61% vs 67%).
+- **No verdict run yet.** Run the verdict stage on U5 before adopting it; the queries are the one area where it could lose accuracy. (Done in round 3: no loss.)
+
+## Round 3: public benchmarks (2026-11-15)
+
+**Question:** do the live prompts (B0) and U5 lose accuracy on labelled public claims, and what does each stage cost?
+
+**Setup** ([benchmark_eval.py](../tests/eval/benchmark_eval.py)):
+- **Datasets:** FEVER-300, FaVIQ and COVIDFact, the same files used for the factcheck-eval runs (`qwen-factcheck-vllm/data`).
+- **Sample:** 200 claims per dataset, stratified by label, seed 7.
+- **COVIDFact rows:** the 50 with no usable evidence are excluded.
+- **Two evidence modes:**
+  - **Dataset evidence (all 600 claims):** the first search returns the dataset's own evidence snippets, and later searches return nothing. This keeps the results comparable to the earlier runs.
+  - **Live Google search:** 50 claims per dataset, a stratified subset of the 600.
+- **Scoring:** score ≥50 counts as SUPPORTS. For FEVER's 3 labels, a score of 35–65 counts as NOT ENOUGH INFO.
+- **Clarifying questions:** every question was skipped and counted. These are complete claims, so the ideal is no questions at all.
+- **Timings** come from the pipeline's `timings_ms` (`planner_llm`, `web_search`, `verdict`, `total`) plus the clarify or plan call(s).
+
+### Accuracy
+
+Accuracy / macro-F1. The reference column is factcheck-eval: Scout, a single call, evidence supplied, full datasets.
+
+| Dataset | B0, dataset evidence | U5, dataset evidence | B0, live (n=50) | U5, live (n=50) | Reference |
+|---|---|---|---|---|---|
+| FEVER-300 (3 labels) | 0.635 / 0.487 | 0.625 / 0.487 | 0.64 / 0.46 | 0.68 / 0.53 | 0.733 / 0.658 |
+| FEVER, SUPPORTS/REFUTES only | 0.869 | 0.876 | 0.89 | 0.92 | |
+| FaVIQ | 0.810 / 0.810 | 0.815 / 0.815 | 0.64 / 0.64 | 0.74 / 0.74 | 0.821 / 0.829 |
+| COVIDFact | 0.520 / 0.520 | 0.545 / 0.545 | 0.60 / 0.60 | 0.48 / 0.48 | 0.565 / 0.574 |
+
+- **U5 matches B0.**
+  - With dataset evidence, each got 27–31 claims right that the other got wrong (McNemar p = 0.69). The labels agree on 537 of 600 claims.
+  - On the live subset the split was 10 vs 11 (p = 1.0). The live gaps per dataset are within noise at n=50.
+- **Both are close to the reference on FaVIQ and COVIDFact.**
+- **FEVER trails the reference on 3 labels.** The pipeline rarely gives a middle score: only 2 of 55 NOT ENOUGH INFO claims landed in the 35–65 band, and 38 were scored false. On SUPPORTS and REFUTES alone it scores 0.87–0.88.
+
+### Clarifying questions on benchmark claims
+
+Share of claims that got a question / share whose checked claim text was rewritten:
+
+| Dataset | B0, dataset evidence | U5, dataset evidence | B0, live | U5, live |
+|---|---|---|---|---|
+| FEVER-300 | 28% / 16% | 30% / 13% | 24% / 16% | 24% / 10% |
+| FaVIQ | 32% / 30% | 26% / 24% | 28% / 28% | 22% / 28% |
+| COVIDFact | 51% / 50% | 34% / 50% | 54% / 58% | 34% / 48% |
+
+**Both prompts ask far too often on these claims, and U5 asks a little less.** There are three causes:
+- **COVIDFact claims read like topics.** They are lowercase headline fragments.
+- **FaVIQ claims are lowercased and sometimes mistyped** ("us first went into space in 1957" got the question "Which country is meant by 'us'?").
+- **Both prompts ask needless "which X" questions.** For example, "Faith Evans made her first album in Paris" got "Which city?".
+
+After a skip, the claim is usually rewritten, and sometimes with an added fact ("Shonen Jump is published in a continent" became "…in Asia"). Checks that got a question scored lower than those that didn't (0.54–0.56 vs 0.71–0.72 with dataset evidence). However, harder claims are the ones that get questions (COVIDFact, FEVER NOT ENOUGH INFO), so the questions themselves can't be blamed from this data. On FaVIQ alone, accuracy was the same with and without a question.
+
+In the app, a user can answer instead of skipping. Benchmark inputs can't.
+
+### Time per check
+
+p50 (p90) in seconds:
+
+| Stage | B0, dataset evidence | U5, dataset evidence | B0, live | U5, live |
+|---|---|---|---|---|
+| Clarify / plan call(s) | 0.65 (1.59) | 0.85 (1.79) | 0.64 (1.55) | 0.87 (1.76) |
+| Search-planning LLM turns (`planner_llm`) | 3.25 (5.50) | 2.22 (4.07) | 3.11 (5.00) | 1.93 (2.95) |
+| Web search | (served locally) | (served locally) | 1.04 (1.67) | 0.98 (1.58) |
+| Verdict | 1.03 (1.38) | 1.03 (1.40) | 1.07 (1.50) | 1.09 (1.54) |
+| Analysis total (`timings_ms.total`) | 4.40 (6.69) | 3.30 (5.31) | 5.22 (8.07) | 4.01 (5.84) |
+| **End to end** | **5.41 (7.91)** | **4.49 (6.53)** | **6.22 (9.23)** | **5.13 (7.19)** |
+| LLM calls per check (mean) | 6.44 | 5.19 | 6.25 | 4.78 |
+| Searches per check (mean) | 3.07 | 2.88 | 2.90 | 2.51 |
+
+- **U5 saves about 1 s per check at the median and 1.4–2 s at p90.**
+- **The U5 call itself is about 0.2 s slower** than the live clarify call, because it also writes the claim and the first query.
+- **The saving is in the search loop.** U5 removes the separate turn-1 call and needs slightly fewer search turns.
+- **Search-planning turns are the largest stage in both variants.** They take longer than the web search and the verdict combined.
+- **Google response time alone (`provider_ms`) was not captured** in this run. The log line is at INFO level, and the script now sets that level. The `web_search` stage above covers search time.
+
+### LLM errors
+
+All runs completed with a score for every check.
+
+| Problem | B0 | U5 |
+|---|---|---|
+| Malformed JSON, dataset evidence | 19 / 3,863 calls | 0 / 3,714 |
+| Malformed JSON, live | 4 / 937 | 0 / 867 |
+| Other schema problems (unknown class, options on class C, search with no query) | 0 | 4 / 3,714, all corrected in code |
+
+Partway through the first run, the Vertex access token expired (it lasts about 1 hour), and 434 checks failed with a 401 error. Those rows were removed and re-run with a fresh token, so they aren't counted above. A long eval or a long-lived worker needs to refresh this token.
+
+### Verdict on U5
+
+**U5 passes the accuracy check from round 2:** it is no worse than the live path on 600 labelled claims and is about 1 s faster.
+
+**Before adopting it, cut needless questions on complete claims.** Both prompts ask on 25–50% of benchmark claims. Ideas to test:
+- "Never ask about capitalisation, typos or lowercase text."
+- "Never ask which X when the claim names X."
+
+Then re-run this benchmark.
+
 ## Limits
 
 - **Latency was measured from a laptop to Vertex**, one request at a time, not on dev. The relative difference holds; the absolute numbers will differ.
@@ -128,6 +265,11 @@ python tests/eval/combined_eval.py --probe
 python tests/eval/combined_eval.py --stage first --reps 3
 python tests/eval/combined_eval.py --stage verdict --variants B0,C1
 python tests/eval/combined_eval.py --report
+python tests/eval/benchmark_eval.py --mode dataset --per-dataset 200
+python tests/eval/benchmark_eval.py --mode live --per-dataset 200 --live-subset 50
+python tests/eval/benchmark_eval.py --report
 ```
+
+The benchmark script resumes from its results file. Delete rows with `"score": null` and run it again to retry failed checks.
 
 Raw results are in `tests/eval/results/`.

@@ -69,8 +69,9 @@ class Settings(BaseSettings):
     # Run the verifier with its vocabulary trimmed to EN/FR pieces (~0.37 GB instead of ~1.27 GB loaded)
     SEMCACHE_VERIFIER_TRIM: bool = True
     SEMCACHE_ENTAIL_T: float = 0.92
-    # false: exact (normalized) matches only; the NLI model is not loaded and paraphrases never reuse a verdict.
-    # Embeddings are still stored, so turning it back on can match entries written meanwhile.
+    # NLI matching for the subclaim cache (whole claims are matched on exact text only, for batch runs).
+    # false: exact (normalized) subclaim matches only and the NLI model is not loaded. Embeddings are still stored,
+    # so turning it back on can match entries written meanwhile.
     SEMCACHE_NLI_ENABLED: bool = True
     # Oldest entry each path may reuse: interactive UI checks, and POST /claims/batch
     SEMCACHE_UI_TTL_HOURS: int = 24
@@ -79,6 +80,16 @@ class Settings(BaseSettings):
     SEMCACHE_MAX_ENTRIES: int = 50_000
     SEMCACHE_VERDICT_TEMPERATURE: float = 0.2
     SEMCACHE_REPLAY_DELAY_MS: int = 15
+
+    # Atomic claim decomposition before the search loop (CAAFC, arXiv 2605.12436), on a small MaaS model
+    CLAIM_DECOMPOSITION_ENABLED: bool = False
+    DECOMPOSE_MODEL_NAME: str = "openai/gpt-oss-120b-maas"
+    # gpt-oss on Vertex MaaS is served only through the global endpoint
+    DECOMPOSE_LOCATION: str = "global"
+    DECOMPOSE_MAX_SUBCLAIMS: int = 5
+    # Reuse a cached subclaim's search results for a different claim; needs decomposition and the semantic cache on
+    SUBCLAIM_CACHE_ENABLED: bool = True
+    SUBCLAIM_CACHE_MAX_ENTRIES: int = 200_000
 
     DEBUG: bool = False
 

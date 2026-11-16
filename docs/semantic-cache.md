@@ -2,9 +2,17 @@
 
 Repeated or paraphrased claims reuse earlier analyses instead of re-running the full search + LLM loop.
 
+> **Current scope.**
+> - Whole-claim verdicts are reused **only by `/claims/batch`, on an exact (normalized) text match**. Batch requests
+>   come from benchmarks.
+> - Interactive checks never get a cached verdict. They reuse cached **subclaim evidence** with the same
+>   embedding + NLI matching described below (see [claim-decomposition.md](claim-decomposition.md)).
+> - In code: `CachePolicy.claim` (only batch sets it) and `CachePolicy.claim_nli` (kept, but no path sets it).
+
 ## How it works
 
-This runs on every analysis, both the interactive stream and `/claims/batch`. No LLM is called during a lookup. Entries
+Whole-claim lookups run on `/claims/batch` only (exact match, step 1); steps 2–3 are what subclaim lookups use. No LLM
+is called during a lookup. Entries
 are filtered by language, by age (24 hours for UI checks, 7 days for `/claims/batch`), and by a hash of `default`, `preferred_domains`, the model and the analysis
 prompts.
 
@@ -68,7 +76,10 @@ logged and falls back to the normal pipeline. Each candidate's similarity, entai
 
 ### Frontend (separate repo)
 
-When `analysis_complete.content.cached` is true, show a disclaimer such as: *"This claim was previously checked on
+Interactive checks no longer get whole-claim hits, so `cached` is always false there and the disclaimer below doesn't
+appear. Re-check still applies: it skips the subclaim cache read and refreshes those entries.
+
+Previously: when `analysis_complete.content.cached` is true, show a disclaimer such as: *"This claim was previously checked on
 {cached_at}. Results may be up to a day old and may not reflect newer developments."* Next to it, add a **Re-check**
 button that reopens the stream with `bypass_cache=true`.
 
@@ -85,12 +96,12 @@ show it. Batch results (`/claims/batch/results`) don't include it either.
 | `SEMCACHE_VERIFIER_MODEL` | `MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7` | Source checkpoint; the trimmed copy is built from it into the image by `app/preload_model.py`. |
 | `SEMCACHE_VERIFIER_TRIM` | `true` | `false` runs the full model (about 1.27 GB). After regenerating the vocabulary with `tests/build_verifier_vocab.py`, re-run `tests/calibrate.py`. |
 | `SEMCACHE_ENTAIL_T` | `0.92` | Re-check with `tests/calibrate.py` after changing the model or threshold. |
-| `SEMCACHE_UI_TTL_HOURS` | `24` | Oldest entry an interactive (UI) check reuses. Older entries are re-checked and replaced. |
+| `SEMCACHE_UI_TTL_HOURS` | `24` | Oldest subclaim entry an interactive (UI) check reuses. |
 | `SEMCACHE_BATCH_TTL_HOURS` | `168` | Oldest entry a `/claims/batch` run reuses. Entries are deleted after the longer of the two. |
 | `SEMCACHE_MAX_ENTRIES` | `50000` | Size cap, about 11 KB per entry with indexes (about 0.55 GB). Each new entry deletes the oldest ones beyond the cap. |
-| `SEMCACHE_NLI_ENABLED` | `true` | `false`: exact (normalized) matches only. The NLI model isn't loaded (about 0.4 GB less memory) and paraphrases never reuse a verdict, which suits repeated benchmark runs. Embeddings are still stored, so re-enabling it can match entries written meanwhile. |
+| `SEMCACHE_NLI_ENABLED` | `true` | Subclaim matching only (whole claims are exact-only). `false`: exact subclaim matches only, and the NLI model isn't loaded (about 0.4 GB less memory). |
 | `SEMCACHE_EMBEDDING_MODEL` / `SEMCACHE_EMBEDDING_LOCATION` | `text-multilingual-embedding-002` / `us-central1` | |
-| `SEMCACHE_VERDICT_TEMPERATURE` | `0.2` | Used only on evidence hits. |
+| `SEMCACHE_VERDICT_TEMPERATURE` | `0.2` | Used only on evidence hits, which exact-only batch lookups never produce. |
 | `SEMCACHE_REPLAY_DELAY_MS` | `15` | Pause between replayed chunks on a full hit. |
 
 ## Local setup
