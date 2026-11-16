@@ -105,7 +105,9 @@ class VertexAILlamaProvider(LLMProvider):
             self.client = self.client.with_options(api_key=token, default_headers={"Authorization": f"Bearer {token}"})
             logger.info("Refreshed access token")
 
-    async def generate_response(self, messages: List[Message], temperature: float = 0.7) -> Response:
+    async def generate_response(
+        self, messages: List[Message], temperature: float = 0.7, json_mode: bool = False
+    ) -> Response:
         try:
             self._refresh_token_if_needed()
 
@@ -122,6 +124,7 @@ class VertexAILlamaProvider(LLMProvider):
                     temperature=temperature,
                     max_tokens=self.max_output_tokens,
                     extra_body=self.extra_body,
+                    **({"response_format": {"type": "json_object"}} if json_mode else {}),
                 )
                 if response.choices[0].message.content is not None:
                     break

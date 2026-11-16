@@ -249,6 +249,22 @@ Then re-run this benchmark.
 - **There are no false claims in the benchmark set,** so it can't show whether false claims are still caught. The clear claims are all true.
 - **The simulated user always picks the first option,** which differs between variants, so underspecified claims often end up as different claims.
 
+## Adopted (2026-11-16)
+
+U5 is now live behind `USE_COMBINED_MULTI_PROMPT` (default `True`). Setting it to `False` restores the separate `CLARIFY_CLAIM` call and turn 1, unchanged.
+
+- **The call:** `/claims/clarify` makes one JSON-mode call with `AnalysisPrompt.CLARIFY_AND_PLAN`. This is U4's system prompt plus U5's user message.
+- **Harmful inputs:** options are blanked in code.
+- **When the claim is ready:** the call's `REASON`/`SEARCH` reply is kept in memory, keyed by language and claim text. It is used once and expires after 15 minutes.
+- **The fact-check:** when it starts on that same claim, the search loop uses the stored reply as turn 1 and skips that LLM call. `timings_ms.planned_turn` is 1 when this happens.
+- **Fallbacks:** if there is no stored reply (another pod, a restart, an edited claim, a cache hit or a decomposed claim), turn 1 runs as before.
+
+No frontend or database change was needed. Tests are in [test_combined_multi_prompt.py](../tests/test_combined_multi_prompt.py).
+
+Not done yet:
+- **Cache first:** the semantic cache is still checked after clarify.
+- **Cache reset:** `params_hash` still covers `ORCHESTRATOR_PROMPT`, which stays in use for later turns, so the existing cache stays valid.
+
 ## Next, if adopted
 
 The live order changes, so wiring this in needs its own plan:

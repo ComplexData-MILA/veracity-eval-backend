@@ -45,6 +45,7 @@ from app.repositories.implementations.search_repository import SearchRepository
 from app.repositories.implementations.source_repository import SourceRepository
 from app.services.interfaces.web_search_service import WebSearchServiceInterface
 from app.services import claim_decomposition
+from app.services.claim_extraction_service import take_planned_turn
 from app.services.claim_matching import TIER_FULL
 from app.services.semantic_cache_service import (
     CacheHit,
@@ -216,18 +217,27 @@ class AnalysisOrchestrator:
                     claim_text, query, language, current_analysis.id, preferred_domains, cache_policy, timings
                 )
 
+            # Turn 1 already planned by the combined clarify call; only used when turn 1 would see just the claim
+            planned_turn = take_planned_turn(claim_text, language) if settings.USE_COMBINED_MULTI_PROMPT else None
+            if not (len(messages) == 1 and messages[0].content == query):
+                planned_turn = None
+
             stage = time.perf_counter()
             timings["llm_turns"] = timings["searches"] = 0
             for turns in range(0 if cache_hit else MAX_NUM_TURNS):
 
                 await self._analysis_repo._session.rollback()
 
-                turn_start = time.perf_counter()
-                response = await self._llm.generate_response(messages)
-                _add_elapsed(timings, "planner_llm", turn_start)
-                timings["llm_turns"] += 1
+                if planned_turn is not None:
+                    main_agent_message, planned_turn = planned_turn, None
+                    timings["planned_turn"] = 1
+                else:
+                    turn_start = time.perf_counter()
+                    response = await self._llm.generate_response(messages)
+                    _add_elapsed(timings, "planner_llm", turn_start)
+                    timings["llm_turns"] += 1
 
-                main_agent_message = response.text
+                    main_agent_message = response.text
 
                 assert main_agent_message is not None, (
                     "Invalid Main Agent API response:",

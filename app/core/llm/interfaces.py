@@ -7,8 +7,10 @@ class LLMProvider(ABC):
     """Abstract base class for LLM providers"""
 
     @abstractmethod
-    async def generate_response(self, messages: List[Message], temperature: float = 0.7) -> Response:
-        """Generate a complete response"""
+    async def generate_response(
+        self, messages: List[Message], temperature: float = 0.7, json_mode: bool = False
+    ) -> Response:
+        """Generate a complete response; json_mode asks the provider for a single JSON object"""
         pass
 
     @abstractmethod

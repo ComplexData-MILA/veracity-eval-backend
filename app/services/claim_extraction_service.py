@@ -2,7 +2,9 @@ import json
 import logging
 import re
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import List, Optional, Tuple
 
 from app.core.config import settings
@@ -35,6 +37,42 @@ CLARIFY_NOT_A_CLAIM = "B"
 # Clarifying questions asked before the claim is fact-checked anyway.
 MAX_CLARIFY_ROUNDS = 2
 MAX_CLARIFY_OPTIONS = 4
+CLARIFY_HARMFUL = "C"
+SKIPPED_ANSWER = (
+    "(skipped: choose the most likely reading, or failing that the most common claim on the subject, "
+    "and state it as an assumption)"
+)
+SKIPPED_ANSWER_FR = (
+    "(ignorée : choisissez l'interprétation la plus probable, ou à défaut l'affirmation la plus courante "
+    "sur le sujet, et indiquez-la comme hypothèse)"
+)
+
+# Turn 1 of the search loop, planned by the combined clarify call (USE_COMBINED_MULTI_PROMPT) and used once by
+# the fact-check of the same claim. In memory: a miss (another pod, restart, edited claim) just runs turn 1 as before.
+PLANNED_TURN_TTL_SECONDS = 900
+MAX_PLANNED_TURNS = 1000
+MAX_QUERY_CHARS = 500
+_planned_turns: "OrderedDict[Tuple[str, str], Tuple[float, str]]" = OrderedDict()
+
+
+def _planned_turn_key(claim: str, language: str) -> Tuple[str, str]:
+    return language, " ".join(clean_unicode_text(claim).split())
+
+
+def remember_planned_turn(claim: str, language: str, turn: str) -> None:
+    key = _planned_turn_key(claim, language)
+    _planned_turns[key] = (time.monotonic(), turn)
+    _planned_turns.move_to_end(key)
+    while len(_planned_turns) > MAX_PLANNED_TURNS:
+        _planned_turns.popitem(last=False)
+
+
+def take_planned_turn(claim: str, language: str) -> Optional[str]:
+    """The planned turn-1 reply for this claim, if a recent clarify call made one. Each plan is used once."""
+    entry = _planned_turns.pop(_planned_turn_key(claim, language), None)
+    if entry and time.monotonic() - entry[0] < PLANNED_TURN_TTL_SECONDS:
+        return entry[1]
+    return None
 
 
 @dataclass
@@ -216,6 +254,8 @@ class ClaimExtractionService:
             return ClarificationResult(CLARIFY_READY, claim)
         # A skipped question means "just check it": stop asking rather than rephrase the same question.
         allow_ask = len(turns) < MAX_CLARIFY_ROUNDS and all(answer for _, answer in turns)
+        if settings.USE_COMBINED_MULTI_PROMPT:
+            return await self._clarify_and_plan(claim, language, turns, allow_ask)
         messages = [LLMMessage(role="user", content=self._build_clarify_prompt(claim, language, turns, allow_ask))]
 
         started = time.perf_counter()
@@ -231,6 +271,66 @@ class ClaimExtractionService:
             f"round={len(turns) + 1} status={result.status}"
         )
         return result
+
+    async def _clarify_and_plan(
+        self, claim: str, language: str, turns: List[Tuple[str, Optional[str]]], allow_ask: bool
+    ) -> ClarificationResult:
+        """One call returns either a clarifying question, or the claim plus the first search of its fact-check.
+
+        The search is kept for take_planned_turn, so the fact-check skips its own turn-1 LLM call. Errors fail open
+        the same way as the separate clarify call.
+        """
+        started = time.perf_counter()
+        try:
+            response = await self._llm.generate_response(
+                self._build_plan_messages(claim, language, turns, allow_ask), temperature=0.0, json_mode=True
+            )
+        except Exception:
+            logger.exception("Claim clarify-and-plan LLM call failed")
+            return ClarificationResult(CLARIFY_READY, claim)
+
+        raw = getattr(response, "text", "") or ""
+        result = parse_clarification_response(raw, claim, allow_ask)
+        try:
+            data = json.loads(extract_json_candidate(raw))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            data = None
+        data = data if isinstance(data, dict) else {}
+        if result.status == CLARIFY_ASK and data.get("input") == CLARIFY_HARMFUL:
+            # Harmful input: never offer claims, whatever the model wrote
+            result.options = []
+        query = " ".join(clean_unicode_text(data.get("query") or "").split())[:MAX_QUERY_CHARS]
+        if result.status == CLARIFY_READY and query:
+            reason = " ".join(clean_unicode_text(data.get("reason") or "").split())[:MAX_STATEMENT_CHARS]
+            reason = reason or "Search for evidence about the claim."
+            # Exactly the reply format the search loop's parser expects from turn 1
+            separator = " :" if language == "french" else ":"
+            remember_planned_turn(result.claim, language, f"REASON{separator} {reason}\nSEARCH{separator} {query}")
+        logger.info(
+            f"Clarify timings: llm_ms={round((time.perf_counter() - started) * 1000)} "
+            f"round={len(turns) + 1} status={result.status} combined=1 planned={int(bool(query))}"
+        )
+        return result
+
+    def _build_plan_messages(
+        self, claim: str, language: str, turns: List[Tuple[str, Optional[str]]], allow_ask: bool
+    ) -> List[LLMMessage]:
+        french = language == "french"
+        skipped = SKIPPED_ANSWER_FR if french else SKIPPED_ANSWER
+        lines = [f"Q: {question}\nA: {answer if answer else skipped}" for question, answer in turns]
+        rules = "" if allow_ask else '\nNo more questions are allowed: return status "search".'
+        if french:
+            rules += "\nThe input is in French: write the question, options, claim and query in French."
+        user = (
+            f"Today is {datetime.now().isoformat()}.\n"
+            f"Input:\n{wrap_untrusted(claim)}\n"
+            f"Previous clarifying questions and the user's answers:\n{wrap_untrusted(chr(10).join(lines) or '(none)')}"
+            f"{rules}"
+        )
+        return [
+            LLMMessage(role="system", content=AnalysisPrompt.CLARIFY_AND_PLAN),
+            LLMMessage(role="user", content=user),
+        ]
 
     def _prepare(self, text: str) -> Tuple[str, Optional[str]]:
         """Clean the input, or return the reason it cannot be processed."""
@@ -258,16 +358,10 @@ class ClaimExtractionService:
     ) -> str:
         french = language == "french"
         if french:
-            skipped = (
-                "(ignorée : choisissez l'interprétation la plus probable, ou à défaut l'affirmation la plus courante "
-                "sur le sujet, et indiquez-la comme hypothèse)"
-            )
+            skipped = SKIPPED_ANSWER_FR
             ask_rule = "" if allow_ask else 'Vous devez maintenant renvoyer le statut "ready".'
         else:
-            skipped = (
-                "(skipped: choose the most likely reading, or failing that the most common claim on the subject, "
-                "and state it as an assumption)"
-            )
+            skipped = SKIPPED_ANSWER
             ask_rule = "" if allow_ask else 'You must now return status "ready".'
 
         lines = [f"Q: {question}\nA: {answer if answer else skipped}" for question, answer in turns]

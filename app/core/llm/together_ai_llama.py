@@ -55,7 +55,10 @@ class TogetherAIProvider(LLMProvider):
             logger.warning(f"Math error calculating confidence: {e}")
             return 0.0
 
-    async def generate_response(self, messages: List[Message], temperature: float = 0.7) -> Response:
+    async def generate_response(
+        self, messages: List[Message], temperature: float = 0.7, json_mode: bool = False
+    ) -> Response:
+        # json_mode is not passed on: untested with Together, and the prompts ask for JSON themselves
         try:
             logger.debug(f"Generating response with temperature {temperature}")
 
