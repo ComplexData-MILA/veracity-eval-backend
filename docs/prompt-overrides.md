@@ -1,73 +1,99 @@
 # Changing prompts without a redeploy
 
-Any prompt in `AnalysisPrompt` ([prompts.py](../app/core/llm/prompts.py)) can be replaced at runtime from a Kubernetes ConfigMap. The pod picks up a change within about 1–2 minutes, with no image build, deploy or restart. The texts in `prompts.py` stay the defaults, and git remains the record of what shipped.
+Any prompt in `AnalysisPrompt` ([prompts.py](../app/core/llm/prompts.py)) can be replaced on a running cluster. The change is live in about 2 minutes, with no build, deploy or restart. `prompts.py` stays the default, and git stays the record of every change.
 
-## How it works
+## Quick start: try a prompt change on dev
 
-1. **The ConfigMap.** It is called `veracity-prompt-overrides` and holds one file, `prompts.json`, that maps prompt names to their text. Terraform creates it with `{}` (no overrides) and then ignores its contents, so terraform never undoes a change.
-2. **The mount.** The file is mounted as a directory at `/app/prompt-overrides/`, and `PROMPT_OVERRIDES_PATH` points to it. A directory mount is required: kubelet only updates files in place when the mount is not a `sub_path`.
-3. **Reloading.** The app checks the file every 30 seconds and applies it when it changes ([prompt_overrides.py](../app/core/llm/prompt_overrides.py)).
-4. **Restoring a prompt.** A name that is not in the file uses its shipped text from `prompts.py`. Removing a name, or setting the file back to `{}`, restores the shipped text.
-5. **Bad files.** A file that fails validation is ignored as a whole, and the last good prompts stay in place. The pod logs `Prompt overrides <sha> rejected` with the reasons.
-6. **The cache.** The semantic cache key reads the prompts when it's computed. Overriding a fact-check or verdict prompt therefore starts a fresh cache, just as a code change would.
+**You need:** `gcloud` logged in with access to the `misinformation-mitigation` project, `kubectl`, and Python.
 
-Validation checks three things:
-- Every name is an existing prompt.
-- Every value is a non-empty string.
-- A prompt that is a format template keeps exactly the same `{fields}`. For example, `CLARIFY_CLAIM` must keep `{claim}`, `{turns}` and `{ask_rule}`. Literal braces in a template are written `{{ }}`. Prompts that aren't templates, such as `CLARIFY_AND_PLAN`, take any text.
-
-## Changing a prompt
-
-1. **Edit the file for the environment:** [infrastructure/prompt-overrides/dev.json](../infrastructure/prompt-overrides/dev.json) or `prod.json`. A value is the prompt text, or a list of strings joined with nothing between them, so long prompts can be wrapped:
-   ```json
-   {"CLARIFY_AND_PLAN": [
-     "You are the first step of a fact-checking service. Your only job is to find out WHICH claim the ",
-     "user wants checked, then prepare it and plan its first web search.\n",
-     "..."
-   ]}
+1. **Switch to the dev branch:**
    ```
-   Line breaks in the prompt are the `\n` at the end of a string. A string that ends without one carries on into the next string.
-
-   **`dev.json` mirrors the combined prompt** (`CLARIFY_AND_PLAN` and `CLARIFY_AND_PLAN_INPUT`) from `prompts.py`, so it shows what is live and is the place to try a change. Edit the text there to test a new version.
-   - **Keeping it in sync:** a pre-commit hook runs `sync` whenever `prompts.py` is committed, and copies the new shipped text into `dev.json`. An entry you have changed is kept, and the hook says so. Install the hooks once with `pre-commit install`. The hook compares against the last commit, so a prompt change committed without the hooks leaves `dev.json` behind; run the command below by hand to fix it.
-   - **Keeping the cluster in sync:** `DEPLOY_ENV=dev deploy.sh` re-applies `dev.json` after every deploy, so the ConfigMap never pins an older copy over the new image's prompts.
-   - **Adding another prompt** at its shipped text, ready to edit:
-     ```
-     python -m app.core.llm.prompt_overrides sync infrastructure/prompt-overrides/dev.json GET_VERACITY
-     ```
-   - **Once a change has proven itself,** move it into `prompts.py`. The hook then sees the entry match the shipped text again.
-
-   `prod.json` stays `{}` unless prod needs an override.
-
-   **Which prompts can be overridden:** any attribute of `AnalysisPrompt` except the protected ones listed under Security. Every caller reads the prompt when it runs, so an override takes effect on the next request. `CLAIM_ANALYSIS(_FRENCH)`, `CLAIM_DETECTION`, `GET_ANTH_CONFIDENCE(_MOD)`, `IDEAL_PROMPT`, `REMOVE_SOURCES` and `SUMMARIZE_SEARCH` are accepted but have no effect, because nothing calls them.
-2. **Check it locally:**
+   git switch dev-env && git pull
+   ```
+   Work on `dev-env`. Every dev deploy re-applies `dev.json` from this branch, so a change pushed anywhere else is overwritten by the next deploy.
+2. **Edit [dev.json](../infrastructure/prompt-overrides/dev.json).** It holds the live combined prompt (`CLARIFY_AND_PLAN` and `CLARIFY_AND_PLAN_INPUT`). See [The file](#the-file) for the format.
+3. **Check it.** It should print `OK`:
    ```
    python -m app.core.llm.prompt_overrides check infrastructure/prompt-overrides/dev.json
    ```
-3. **Evaluate clarification prompts first.** Add the text as a variant in [candidate_prompts.py](../tests/eval/candidate_prompts.py) under `TUNED`, then run [multiturn_eval.py](../tests/eval/multiturn_eval.py) against the shipped prompt. See [multiturn-eval.md](multiturn-eval.md).
-4. **Commit and push the file.** For prod, merge it to `main` first. Then apply it:
+4. **Commit and push it.** The apply script refuses files that are uncommitted or unpushed.
+   ```
+   git add infrastructure/prompt-overrides/dev.json
+   git commit -m "Try new clarify prompt on dev"
+   git push
+   ```
+5. **Apply it.** This also switches your `kubectl` context to the dev cluster.
    ```
    DEPLOY_ENV=dev bash infrastructure/apply-prompt-overrides.sh infrastructure/prompt-overrides/dev.json
    ```
-   Like `deploy.sh`, the script refuses files that are uncommitted or unpushed, and refuses prod from any branch other than `main`. It validates the file, applies it, and records the commit on the ConfigMap.
-5. **Confirm it within about 2 minutes:**
+6. **After about 2 minutes, confirm it loaded:**
    ```
    kubectl -n misinformation-mitigation logs deploy/misinformation-mitigation-api -c misinformation-mitigation-api | grep "Prompt overrides"
    ```
-   It should show `Prompt overrides <sha> applied: [...]`. A rejected file logs `rejected` with the reasons.
-6. **To roll back,** remove the entry, then re-add it at its shipped text with the `sync` command above if `dev.json` should keep mirroring it. Commit and apply the file. `{}` restores every shipped prompt.
+   The latest line should say `applied`. If it says `rejected`, it gives the reasons, and dev keeps its previous prompts.
+7. **Try it** on the dev site or at `https://api-dev.veri-fact.ai`.
 
-## Security
+**To undo,** revert your edit to `dev.json`, then repeat steps 4–5.
 
-**Failure behaviour.**
-- **A bad file** is rejected as a whole, and the running pod keeps its last good prompts.
-- **A restart with a bad file in place** starts on the shipped prompts, not the last good overrides, and logs the rejection.
-- **Deleting the ConfigMap** restores the shipped prompts.
-- **Partial updates can't happen.** A reload swaps every prompt in one step on the event loop, so no request sees half of an update.
-- **More than one pod:** each pod reloads on its own schedule, so pods can disagree for up to about 30 seconds.
+**Once a change works,** move the text into `prompts.py` in a normal pull request, so it reaches prod through code review.
 
-## Things to know
+**Before trying a clarification prompt on dev,** you can also score it offline. Add it as a variant under `TUNED` in [candidate_prompts.py](../tests/eval/candidate_prompts.py), then run [multiturn_eval.py](../tests/eval/multiturn_eval.py); see [multiturn-eval.md](multiturn-eval.md).
 
-- **Save tested prompts in git.** Once an override has proven itself, move the text into `prompts.py` and clear the ConfigMap. Overrides live only in the cluster, so a new cluster or a manual ConfigMap deletion would lose them.
-- **Every pod checks the file on its own,** so with more replicas each pod picks up a change within the same 30-second window.
-- **Flags are separate.** Feature flags such as `USE_COMBINED_MULTI_PROMPT` are still env vars changed with `kubectl set env`, which restarts the pod.
+## The file
+
+The file maps prompt names to their text. Each prompt can be one string, or a list of lines joined back together with nothing in between:
+```json
+{"CLARIFY_AND_PLAN": [
+  "You are the first step of a fact-checking service. Your only job is to find out WHICH claim the ",
+  "user wants checked, then prepare it and plan its first web search.\n",
+  "..."
+]}
+```
+- **Line breaks:** a `\n` at the end of a line is a real line break in the prompt. A line without one runs straight into the next, so keep its trailing space.
+- **Template fields:** a template prompt must keep exactly the same `{fields}`. For example, `CLARIFY_AND_PLAN_INPUT` must keep `{claim}`, `{date}`, `{turns}` and `{rules}`. Literal braces in a template are written `{{ }}`.
+- **Adding a prompt:** this adds a prompt at its current text, ready to edit:
+  ```
+  python -m app.core.llm.prompt_overrides sync infrastructure/prompt-overrides/dev.json GET_VERACITY
+  ```
+- **Removing a prompt:** a name that isn't in the file uses its text from `prompts.py`, and `{}` restores them all.
+
+**What can be overridden:**
+- **Allowed:** any `AnalysisPrompt` text. Each override takes effect on the next request.
+- **Protected, so the file is rejected:** the injection and harmful-request defences, which change only through code review:
+  - `UNTRUSTED_SOURCES(_FR)`
+  - `FOLLOWUP_RULES`
+  - `FOLLOWUP_REMINDER`
+  - `FOLLOWUP_ROUTER`
+  - `HARM_CHECK`
+  - `CLARIFY_HARMFUL_REFUSAL(_FR)`
+- **Accepted but no effect:** nothing calls these, so overriding them changes nothing:
+  - `CLAIM_ANALYSIS(_FRENCH)`
+  - `CLAIM_DETECTION`
+  - `GET_ANTH_CONFIDENCE(_MOD)`
+  - `IDEAL_PROMPT`
+  - `REMOVE_SOURCES`
+  - `SUMMARIZE_SEARCH`
+- **Cache:** overriding a fact-check or verdict prompt (`ORCHESTRATOR_PROMPT`, `GET_VERACITY`) starts a fresh verdict cache, as a code change would.
+- **Size:** each prompt is capped at 20,000 characters.
+
+## How dev.json stays in sync with prompts.py
+
+- **In git:** a pre-commit hook copies `prompts.py` changes into `dev.json` whenever `prompts.py` is committed. An entry you have edited is kept, and the hook prints a note. Install the hooks once with `pre-commit install`.
+  - A prompt change committed without the hooks leaves `dev.json` behind.
+  - To catch up, run `python -m app.core.llm.prompt_overrides sync infrastructure/prompt-overrides/dev.json`.
+- **On the cluster:** `DEPLOY_ENV=dev bash infrastructure/deploy.sh` re-applies `dev.json` after every deploy, so the cluster never keeps an older copy over the new prompts.
+
+## Prod
+
+`prod.json` stays `{}`, and prompt changes reach prod through `prompts.py`. If prod ever needs an override, the steps are the same with `prod.json` and `DEPLOY_ENV=prod`. The script only applies prod from a commit on `main`.
+
+## How it works
+
+- **Storage:** the file is stored in the `veracity-prompt-overrides` ConfigMap and mounted read-only into the pod at `/app/prompt-overrides/`. Terraform creates it as `{}` and then leaves its contents alone.
+- **Reloading:** the app ([prompt_overrides.py](../app/core/llm/prompt_overrides.py)) checks the file every 30 seconds and applies it when it changes. With several pods, each picks up a change within the same 30-second window.
+- **Bad files:**
+  - A file that fails validation is ignored as a whole, and the pod keeps its last good prompts.
+  - If the pod restarts while a bad file is in place, it starts on the shipped prompts.
+  - Deleting the ConfigMap also restores the shipped prompts.
+- **Audit:** the apply script records the source commit on the ConfigMap. The pod logs the sha of every file it applies or rejects.
+- **Flags are separate:** feature flags such as `USE_COMBINED_MULTI_PROMPT` are env vars, changed with `kubectl set env`, which restarts the pod.
