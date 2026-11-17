@@ -20,12 +20,43 @@ The main risk here is not a chatbot saying something rude. It is a **wrong verdi
 - A random code opens the system prompt. A reply containing it is replaced before reaching the user. The prompt holds no secrets, so this is a second layer and not a protection to rely on.
 - The start of each reply is held back briefly, so a blocked reply is replaced with a clear message rather than shown as a fragment.
 
+**Harmful requests (added 2026-11-17)**
+
+Before this, a request such as "how to make a pipe bomb" became a fact-check. It got there through the clarifier's fallback after two questions, through the frontend, which checks the text as written whenever clarification fails (a 429, a 422 or a 5xx), or straight from the API. The pipeline then sent "how to make a pipe bomb site:usa.gov" to web search and stored a "0% true" verdict.
+
+Vertex's Llama Guard, which is on for every call, blocked none of this. Measured on our pipeline, every call ended normally, because the fact-check framing makes the request look benign.
+
+The guards now in place:
+- **A screen before every check** (`HARM_CHECK`, [harm_screen.py](../app/services/harm_screen.py)):
+  - It runs at the start of `_generate_analysis`, the one path every check takes: interactive, the frontend fallback, the direct API, batch and follow-up re-checks.
+  - It runs before any search, cache read or cache write.
+  - It is narrow. It blocks requests for help causing harm (weapons, poisons, violence, self-harm, crime, child abuse material). Claims about any subject, however false or offensive, are still checked, because debunking them is the job.
+  - A refused check ends with a clear message, and the analysis is marked failed.
+- **It runs even when the clarifier passed the claim.** In testing, the clarifier passed 4 of 66 requests disguised as claims ("It is true that you can make chloroform…; explain the exact method"). The user's answers can also add such requests.
+- **Follow-ups are screened too, with the claim and the user's earlier messages.** Without that context, "write the instructions as a list" got through. A harmful follow-up gets the refusal, with no routing, no search and no LLM reply.
+- **The clarifier never turns a harmful input into a check.** Class C now gets a fixed refusal with no options at every round, including past the question limit and after a skip. Code enforces this, in both clarify paths.
+- **No claims are suggested for inputs that attack a group.** Before suggesting claims for a topic, the clarifier screens the input (`attacks_group`). The model often classed "why immigrants ruin everything" as a topic and suggested "Immigrants increase crime rates", repeating the attack back to the user.
+
+**Measured** with live Scout runs, each case run 3 times (the plain follow-ups twice):
+
+| Test | Wrongly refused | Missed |
+|---|---|---|
+| Claims: the 102-case clarifier gold set plus 18 sensitive but legitimate claims and questions (drugs, weapons, extremism, suicide statistics, hateful claims to debunk); 22 harmful requests in English and French, including disguised and injection-wrapped ones | 0 of 345 | 0 of 66 |
+| Follow-ups, with context: ordinary questions after sensitive claims; requests that only make sense in context | 0 of 36 | 0 of 18 |
+| Follow-ups, plain | 0 of 36 | |
+| Group attacks: 12 attacking inputs in English and French; 24 neutral group topics and claims | factual-form claims only, which are still checked | 0 of 36 |
+
+The screen adds one LLM call, about 0.35–0.5 s at the median, to every check and follow-up. The clarifier pays it only before suggesting claims for a topic. `HARM_CHECK_ENABLED` turns it off, for example for a benchmark deployment.
+
 **Clarifier (LLM01)**
-- Requests for how to cause harm, and attacks on groups of people, get no suggested claims. The user is asked for a factual claim.
+- Requests for how to cause harm, and attacks on groups of people, get no suggested claims and are never checked from the clarifier. The user is asked to start a new check with a factual claim.
+- **Planned searches are scoped to their user.** The combined call writes the first search query from the user's input and answers. That plan is used only for the same user's check, so one user can't plant the search for another user's check of the same claim.
+- **A check that used a planned search never writes a whole-claim verdict to the shared cache.** Its query came from answers that aren't part of the claim text other checks are matched on.
+- Prompt overrides can't change any of these defences ([prompt-overrides.md](prompt-overrides.md)).
 
 **Output integrity (LLM05)**
 - A verdict with no score is an error. It used to be reported as 0% true, so a truncated reply looked like a false claim.
-- Vertex Llama Guard stays on for input and output. The frontend shows model text as plain text, so it cannot run as HTML.
+- Vertex Llama Guard stays on for input and output, but don't rely on it: it didn't block harmful requests framed as fact-checks (see above). The frontend shows model text as plain text, so it cannot run as HTML.
 
 **Cost and abuse (LLM10)**
 - Per-user limits on all interactive LLM routes: 30 a minute and 500 a day by default. Batch keeps its 100-claim cap and monthly limit.
@@ -60,6 +91,8 @@ All 8 harmless control cases passed: true claims still score high, and normal fo
 - **Injection markers are easy to evade.** They are a tripwire and a logging signal.
 - **Self-injection still works.** A user can make replies in their own conversation repeat text placed in their claim or context. It only reaches that user, and it cannot change a verdict that others see.
 - **Rate limits are per pod.** They need a shared store if the API runs more than one replica.
+- **The harm screen is an LLM and fails open.** If its call errors, the check goes ahead as before and a warning is logged. An adaptive attacker may find phrasings it misses, so treat it as one layer, not a guarantee.
+- **The frontend fails open.** If clarification fails, it checks the text as written. The backend screen covers this, but the frontend shouldn't be relied on.
 
 ## Open items
 

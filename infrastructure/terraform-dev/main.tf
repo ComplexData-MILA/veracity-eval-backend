@@ -259,6 +259,22 @@ resource "google_service_account_iam_binding" "workload_identity_sa_binding" {
   ]
 }
 
+# Prompt overrides, edited with kubectl (docs/prompt-overrides.md). Created empty; terraform never overwrites edits
+resource "kubernetes_config_map" "prompt_overrides" {
+  metadata {
+    name      = "veracity-prompt-overrides"
+    namespace = kubernetes_namespace.misinformation_mitigation.metadata[0].name
+  }
+
+  data = {
+    "prompts.json" = "{}"
+  }
+
+  lifecycle {
+    ignore_changes = [data]
+  }
+}
+
 resource "kubernetes_deployment" "misinformation_mitigation_api" {
   metadata {
     name      = "misinformation-mitigation-api"
@@ -345,6 +361,19 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
             sub_path   = "service-account.json"
           }
 
+          # Prompt texts changed without a redeploy (docs/prompt-overrides.md). Mounted as a directory, not a
+          # sub_path, so kubelet updates the file in place and the app reloads it
+          env {
+            name  = "PROMPT_OVERRIDES_PATH"
+            value = "/app/prompt-overrides/prompts.json"
+          }
+
+          volume_mount {
+            name       = "prompt-overrides"
+            mount_path = "/app/prompt-overrides"
+            read_only  = true
+          }
+
 
           # The semantic cache verifier model adds ~1 GB; request it so the pod is placed on a node with room.
           # No limit, so a spike is not OOM-killed at an arbitrary cap.
@@ -391,6 +420,14 @@ resource "kubernetes_deployment" "misinformation_mitigation_api" {
               key  = "service-account.json"
               path = "service-account.json"
             }
+          }
+        }
+
+        volume {
+          name = "prompt-overrides"
+          config_map {
+            name     = kubernetes_config_map.prompt_overrides.metadata[0].name
+            optional = true
           }
         }
       }

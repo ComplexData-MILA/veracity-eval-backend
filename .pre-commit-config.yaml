@@ -9,3 +9,11 @@ repos:
     hooks:
     -   id: flake8
         exclude: ^.*migrations/.*$
+-   repo: local
+    hooks:
+    -   id: sync-dev-prompt-overrides
+        name: copy prompts.py changes into prompt-overrides/dev.json
+        entry: python -m app.core.llm.prompt_overrides sync infrastructure/prompt-overrides/dev.json
+        language: system
+        files: ^app/core/llm/prompts\.py$
+        pass_filenames: false

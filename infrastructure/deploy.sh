@@ -192,6 +192,12 @@ fi
 
 kubectl rollout status deployment/misinformation-mitigation-api -n misinformation-mitigation --timeout=10m
 
+# dev.json mirrors prompts.py (synced by a pre-commit hook), so re-apply it: the ConfigMap would otherwise keep pinning
+# the prompts from the last time it was applied, overriding this image's prompts.py
+if [ "$DEPLOY_ENV" = "dev" ]; then
+    DEPLOY_ENV=dev bash infrastructure/apply-prompt-overrides.sh infrastructure/prompt-overrides/dev.json
+fi
+
 echo "Checking API health at ${HEALTH_URL}..."
 curl -fsS --max-time 30 "$HEALTH_URL"
 echo

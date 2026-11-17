@@ -53,9 +53,14 @@ class Settings(BaseSettings):
     SEMANTIC_CACHE_ENABLED: bool = True
     # Clarifying questions before a check and the follow-up router after it
     MULTITURN_ENABLED: bool = True
+    # Screen every claim for requests for harmful help before any search or cached verdict (~0.35 s, one LLM call)
+    HARM_CHECK_ENABLED: bool = True
     # One LLM call both clarifies the claim and plans its first search (CLARIFY_AND_PLAN); False restores the
     # separate CLARIFY_CLAIM call and turn 1 of the search loop
     USE_COMBINED_MULTI_PROMPT: bool = True
+    # JSON file of prompt texts overriding AnalysisPrompt, reloaded when it changes (no redeploy); "" turns this off.
+    # In Kubernetes it is the veracity-prompt-overrides ConfigMap; see docs/prompt-overrides.md
+    PROMPT_OVERRIDES_PATH: str = ""
     # Per-user limits on routes that call the LLM; 0 turns a limit off, e.g. for a benchmark run
     LLM_RATE_LIMIT_PER_MINUTE: int = 30
     LLM_RATE_LIMIT_PER_DAY: int = 500

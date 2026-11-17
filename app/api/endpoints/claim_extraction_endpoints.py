@@ -64,6 +64,7 @@ async def clarify_claim(
         text=data.text,
         language=data.language,
         turns=[(turn.question, turn.answer) for turn in data.turns],
+        user_id=current_user.id,
     )
 
     return ClaimClarificationResponse(

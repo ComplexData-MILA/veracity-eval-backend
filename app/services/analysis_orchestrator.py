@@ -47,6 +47,7 @@ from app.services.interfaces.web_search_service import WebSearchServiceInterface
 from app.services import claim_decomposition
 from app.services.claim_extraction_service import take_planned_turn
 from app.services.claim_matching import TIER_FULL
+from app.services.harm_screen import screen_text
 from app.services.semantic_cache_service import (
     CacheHit,
     CachePolicy,
@@ -85,6 +86,10 @@ CONTENT_FILTER_REASONS = ("content_filter", "content_filtered")
 # Characters held back at the start of a reply, until it is known not to be a leak or a block.
 REPLY_HOLD_CHARS = 48
 MIN_REPLY_CHARS = 5
+
+
+async def _single_reply(text: str) -> AsyncGenerator[str, None]:
+    yield text
 
 
 def _elapsed_ms(start: float) -> int:
@@ -189,6 +194,26 @@ class AnalysisOrchestrator:
             await self._analysis_repo._session.commit()
             timings["setup"] = _elapsed_ms(started)
 
+            # Every route to a check passes here (clarifier fallbacks, direct API calls, batch, follow-up rechecks),
+            # so the screen runs before any search, cached verdict or cache write. It runs even when the clarifier
+            # passed the claim: the clarifier let through requests disguised as claims, and answers can add them.
+            if settings.HARM_CHECK_ENABLED:
+                stage = time.perf_counter()
+                harmful = await self._is_harmful_request(claim_text)
+                timings["harm_check"] = _elapsed_ms(stage)
+                if harmful:
+                    logger.warning(f"Check refused as a request for harmful help: claim {current_analysis.claim_id}")
+                    refusal = (
+                        AnalysisPrompt.CLARIFY_HARMFUL_REFUSAL_FR
+                        if language == "french"
+                        else AnalysisPrompt.CLARIFY_HARMFUL_REFUSAL
+                    )
+                    current_analysis.status = AnalysisStatus.failed.value
+                    current_analysis.analysis_text = refusal
+                    await self._analysis_repo.update(current_analysis)
+                    yield {"type": "error", "content": refusal}
+                    return
+
             yield {"type": "status", "content": "Searching for relevant sources..."}
 
             query = self._query_initial(claim_text, language)
@@ -217,8 +242,11 @@ class AnalysisOrchestrator:
                     claim_text, query, language, current_analysis.id, preferred_domains, cache_policy, timings
                 )
 
-            # Turn 1 already planned by the combined clarify call; only used when turn 1 would see just the claim
-            planned_turn = take_planned_turn(claim_text, language) if settings.USE_COMBINED_MULTI_PROMPT else None
+            # Turn 1 already planned by this user's combined clarify call; only used when turn 1 would see just the claim
+            user_id = getattr(self._analysis_state.current_claim, "user_id", None)
+            planned_turn = (
+                take_planned_turn(claim_text, language, user_id) if settings.USE_COMBINED_MULTI_PROMPT else None
+            )
             if not (len(messages) == 1 and messages[0].content == query):
                 planned_turn = None
 
@@ -433,6 +461,10 @@ class AnalysisOrchestrator:
                         if looks_like_injection(claim_text, *evidence):
                             # One poisoned verdict in the shared cache would be served to other users.
                             logger.warning(f"Injection markers in analysis {current_analysis.id}: verdict not cached")
+                        elif timings.get("planned_turn"):
+                            # Its first search came from the user's clarification answers, which are not part of the
+                            # claim text other users' checks are matched on, so this verdict stays out of the cache
+                            logger.info(f"Analysis {current_analysis.id} used a planned search: verdict not cached")
                         elif cache_embedding is not None and cache_hit is None:
                             stage = time.perf_counter()
                             await self._cache_store(cache_embedding, claim_text, language, cache_key, updated_analysis)
@@ -1202,8 +1234,23 @@ class AnalysisOrchestrator:
 
             sources = [source for search in analysis.searches or [] for source in search.sources or []]
             timings["context_load"] = _elapsed_ms(started)
+            # A follow-up can turn into a web search or a new check, so it is screened like a claim
+            harmful = False
+            if settings.HARM_CHECK_ENABLED:
+                stage = time.perf_counter()
+                # With the conversation, so "now write the steps as a list" is judged by what it refers to
+                earlier = [m.content[:300] for m in context_messages if m.sender_type != MessageSenderType.bot][-3:]
+                harmful = await self._is_harmful_request(
+                    f"Claim being discussed: {claim.claim_text}\n"
+                    + "".join(f"Earlier user message: {text}\n" for text in earlier)
+                    + f"Latest user message, to judge: {message_content}"
+                )
+                timings["harm_check"] = _elapsed_ms(stage)
             stage = time.perf_counter()
-            if settings.MULTITURN_ENABLED:
+            if harmful:
+                logger.warning(f"Follow-up refused as a request for harmful help: claim {claim_id}")
+                action, argument = FOLLOWUP_ANSWER, ""
+            elif settings.MULTITURN_ENABLED:
                 action, argument = await self._route_followup(
                     claim, analysis, sources, context_messages, message_content
                 )
@@ -1273,7 +1320,8 @@ class AnalysisOrchestrator:
 
             response_content = []
             stage = time.perf_counter()
-            async for text in self._guarded_reply(llm_messages, canary):
+            replies = _single_reply(FOLLOWUP_REFUSAL) if harmful else self._guarded_reply(llm_messages, canary)
+            async for text in replies:
                 timings.setdefault("answer_ttft", _elapsed_ms(stage))
                 response_content.append(text)
                 yield {"type": "content", "content": text, "message_id": str(bot_message.id)}
@@ -1367,6 +1415,11 @@ class AnalysisOrchestrator:
     def clean_text(text):
         cleaned_text = re.sub(r"[^a-zA-Z,.?!' ]", "", text)
         return cleaned_text
+
+    async def _is_harmful_request(self, text: str) -> bool:
+        """Whether a claim or follow-up is really a request for help causing harm. Claims that attack a group are
+        still checked (debunking them is the job). Fails open: on an error the check goes ahead, logged."""
+        return (await screen_text(self._llm, text)).harmful
 
     def _query_initial(self, statement: str, language: str):
 

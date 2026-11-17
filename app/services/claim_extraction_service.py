@@ -12,6 +12,7 @@ from app.core.llm.interfaces import LLMProvider
 from app.core.llm.messages import Message as LLMMessage
 from app.core.llm.prompts import AnalysisPrompt
 from app.core.text_safety import clean_unicode_text, extract_json_candidate, wrap_untrusted
+from app.services.harm_screen import screen_text
 
 logger = logging.getLogger(__name__)
 
@@ -49,27 +50,29 @@ SKIPPED_ANSWER_FR = (
 
 # Turn 1 of the search loop, planned by the combined clarify call (USE_COMBINED_MULTI_PROMPT) and used once by
 # the fact-check of the same claim. In memory: a miss (another pod, restart, edited claim) just runs turn 1 as before.
+# Keyed by user: the query is written by the model from untrusted input and answers, so one user must never be able
+# to plant the first search of another user's check of the same claim. Never planned for harmful (class C) input.
 PLANNED_TURN_TTL_SECONDS = 900
 MAX_PLANNED_TURNS = 1000
 MAX_QUERY_CHARS = 500
-_planned_turns: "OrderedDict[Tuple[str, str], Tuple[float, str]]" = OrderedDict()
+_planned_turns: "OrderedDict[Tuple[str, str, str], Tuple[float, str]]" = OrderedDict()
 
 
-def _planned_turn_key(claim: str, language: str) -> Tuple[str, str]:
-    return language, " ".join(clean_unicode_text(claim).split())
+def _planned_turn_key(claim: str, language: str, user_id) -> Tuple[str, str, str]:
+    return str(user_id), language, " ".join(clean_unicode_text(claim).split())
 
 
-def remember_planned_turn(claim: str, language: str, turn: str) -> None:
-    key = _planned_turn_key(claim, language)
+def remember_planned_turn(claim: str, language: str, turn: str, user_id=None) -> None:
+    key = _planned_turn_key(claim, language, user_id)
     _planned_turns[key] = (time.monotonic(), turn)
     _planned_turns.move_to_end(key)
     while len(_planned_turns) > MAX_PLANNED_TURNS:
         _planned_turns.popitem(last=False)
 
 
-def take_planned_turn(claim: str, language: str) -> Optional[str]:
-    """The planned turn-1 reply for this claim, if a recent clarify call made one. Each plan is used once."""
-    entry = _planned_turns.pop(_planned_turn_key(claim, language), None)
+def take_planned_turn(claim: str, language: str, user_id=None) -> Optional[str]:
+    """This user's planned turn-1 reply for this claim, if a recent clarify call made one. Each plan is used once."""
+    entry = _planned_turns.pop(_planned_turn_key(claim, language, user_id), None)
     if entry and time.monotonic() - entry[0] < PLANNED_TURN_TTL_SECONDS:
         return entry[1]
     return None
@@ -130,6 +133,64 @@ def parse_clarification_response(raw_text: str, original_claim: str, allow_ask: 
         claim = options[0][:MAX_STATEMENT_CHARS]
     claim = claim or original_claim
     return ClarificationResult(CLARIFY_READY, claim, assumptions=_clean_strings(data.get("assumptions"), 5))
+
+
+def _json_object(raw_text: str) -> dict:
+    try:
+        data = json.loads(extract_json_candidate(raw_text))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _refuse_harmful(result: ClarificationResult, data: dict, language: str) -> ClarificationResult:
+    """A harmful input (class C) never becomes a check from the clarifier, at any round, and never gets suggestions.
+
+    Past the question limit the parser would fall back to checking the text as written, which sent requests such
+    as "how to make a pipe bomb" to web search. The user starts a new check with a factual claim instead.
+    """
+    if data.get("input") != CLARIFY_HARMFUL:
+        return result
+    refusal = (
+        AnalysisPrompt.CLARIFY_HARMFUL_REFUSAL_FR if language == "french" else AnalysisPrompt.CLARIFY_HARMFUL_REFUSAL
+    )
+    return ClarificationResult(CLARIFY_ASK, result.claim, question=refusal, options=[])
+
+
+MAX_UNNAMED = 3
+MAX_UNNAMED_CHARS = 60
+_PRONOUNS = frozenset("he she they him her them il elle ils elles".split())
+_DETERMINERS = frozenset(
+    "the this that these those their his her its le la les ce cet cette ces son sa ses leur leurs".split()
+)
+
+
+def _is_unnamed(phrase: str) -> bool:
+    """A pronoun ("he") or a determiner plus common nouns ("the vaccine", "l'étude"), not a proper name."""
+    words = re.split(r"[\s']+", phrase.strip())
+    first = words[0].lower()
+    if first in _PRONOUNS and len(words) == 1:
+        return True
+    if first not in _DETERMINERS and first != "l" or len(words) < 2:
+        return False
+    # "the Pfizer vaccine", "the Dayton Agreement": a capitalised word after the determiner is a name
+    return not any(word[:1].isupper() for word in words[1:])
+
+
+def _unnamed_subjects(data: dict, claim: str) -> List[str]:
+    """Unnamed people or things the combined call quoted from a claim (class A).
+
+    Kept only if the claim contains the phrase and it is lexically unnamed, so a model that lists a title or a name
+    ("Arsenic and Old Lace") can't make the service ask about it.
+    """
+    if data.get("input") != "A":
+        return []
+    found = []
+    for phrase in _clean_strings(data.get("unnamed"), MAX_UNNAMED):
+        in_claim = re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", claim, flags=re.IGNORECASE)
+        if len(phrase) <= MAX_UNNAMED_CHARS and in_claim and _is_unnamed(in_claim.group(0)):
+            found.append(in_claim.group(0))
+    return found
 
 
 def _to_items(data) -> List:
@@ -243,11 +304,14 @@ class ClaimExtractionService:
 
         return ExtractionResult(statements, REASON_OK)
 
-    async def clarify(self, text: str, language: str, turns: List[Tuple[str, Optional[str]]]) -> ClarificationResult:
+    async def clarify(
+        self, text: str, language: str, turns: List[Tuple[str, Optional[str]]], user_id=None
+    ) -> ClarificationResult:
         """Ask one clarifying question if a missing detail would change the verdict, else return the claim to check.
 
         Stateless: the caller sends back every earlier (question, answer) pair; an answer of None means the user
-        skipped it, so the model proceeds with a stated assumption. Errors fail open to the original claim.
+        skipped it, so the model proceeds with a stated assumption. Errors fail open to the original claim, which
+        the fact-check screens for harmful requests before searching.
         """
         claim = clean_unicode_text(text).strip()
         if not settings.MULTITURN_ENABLED:
@@ -255,7 +319,7 @@ class ClaimExtractionService:
         # A skipped question means "just check it": stop asking rather than rephrase the same question.
         allow_ask = len(turns) < MAX_CLARIFY_ROUNDS and all(answer for _, answer in turns)
         if settings.USE_COMBINED_MULTI_PROMPT:
-            return await self._clarify_and_plan(claim, language, turns, allow_ask)
+            return await self._clarify_and_plan(claim, language, turns, allow_ask, user_id)
         messages = [LLMMessage(role="user", content=self._build_clarify_prompt(claim, language, turns, allow_ask))]
 
         started = time.perf_counter()
@@ -265,7 +329,10 @@ class ClaimExtractionService:
             logger.exception("Claim clarification LLM call failed")
             return ClarificationResult(CLARIFY_READY, claim)
 
-        result = parse_clarification_response(getattr(response, "text", "") or "", claim, allow_ask)
+        raw = getattr(response, "text", "") or ""
+        data = _json_object(raw)
+        result = _refuse_harmful(parse_clarification_response(raw, claim, allow_ask), data, language)
+        result = await self._screen_suggestions(result, data, claim, language)
         logger.info(
             f"Clarify timings: llm_ms={round((time.perf_counter() - started) * 1000)} "
             f"round={len(turns) + 1} status={result.status}"
@@ -273,7 +340,7 @@ class ClaimExtractionService:
         return result
 
     async def _clarify_and_plan(
-        self, claim: str, language: str, turns: List[Tuple[str, Optional[str]]], allow_ask: bool
+        self, claim: str, language: str, turns: List[Tuple[str, Optional[str]]], allow_ask: bool, user_id=None
     ) -> ClarificationResult:
         """One call returns either a clarifying question, or the claim plus the first search of its fact-check.
 
@@ -290,42 +357,66 @@ class ClaimExtractionService:
             return ClarificationResult(CLARIFY_READY, claim)
 
         raw = getattr(response, "text", "") or ""
-        result = parse_clarification_response(raw, claim, allow_ask)
-        try:
-            data = json.loads(extract_json_candidate(raw))
-        except (json.JSONDecodeError, TypeError, ValueError):
-            data = None
-        data = data if isinstance(data, dict) else {}
-        if result.status == CLARIFY_ASK and data.get("input") == CLARIFY_HARMFUL:
-            # Harmful input: never offer claims, whatever the model wrote
-            result.options = []
+        data = _json_object(raw)
+        result = _refuse_harmful(parse_clarification_response(raw, claim, allow_ask), data, language)
+        result = await self._screen_suggestions(result, data, claim, language)
+        unnamed = _unnamed_subjects(data, claim) if allow_ask and not turns else []
+        if unnamed:
+            # An unnamed person or thing ("he", "the vaccine") leaves the claim uncheckable, and the model often
+            # searches anyway or guesses who is meant, so code asks and never offers guesses. First round only,
+            # so an answered question is never repeated.
+            subjects = ", ".join(f'"{subject}"' for subject in unnamed)
+            template = AnalysisPrompt.CLARIFY_UNNAMED_FR if language == "french" else AnalysisPrompt.CLARIFY_UNNAMED
+            question = result.question if result.status == CLARIFY_ASK else template.format(subjects=subjects)
+            result = ClarificationResult(CLARIFY_ASK, claim, question=question, options=[])
         query = " ".join(clean_unicode_text(data.get("query") or "").split())[:MAX_QUERY_CHARS]
-        if result.status == CLARIFY_READY and query:
+        if result.status == CLARIFY_READY and query and data.get("input") in ("A", CLARIFY_NOT_A_CLAIM):
             reason = " ".join(clean_unicode_text(data.get("reason") or "").split())[:MAX_STATEMENT_CHARS]
             reason = reason or "Search for evidence about the claim."
             # Exactly the reply format the search loop's parser expects from turn 1
             separator = " :" if language == "french" else ":"
-            remember_planned_turn(result.claim, language, f"REASON{separator} {reason}\nSEARCH{separator} {query}")
+            turn = f"REASON{separator} {reason}\nSEARCH{separator} {query}"
+            remember_planned_turn(result.claim, language, turn, user_id)
         logger.info(
             f"Clarify timings: llm_ms={round((time.perf_counter() - started) * 1000)} "
             f"round={len(turns) + 1} status={result.status} combined=1 planned={int(bool(query))}"
         )
         return result
 
+    async def _screen_suggestions(
+        self, result: ClarificationResult, data: dict, claim: str, language: str
+    ) -> ClarificationResult:
+        """Before suggesting claims for a non-claim input, check it is not a harmful request or an attack on a group.
+
+        The model often classes "why immigrants ruin everything" as a topic and suggests "Immigrants increase crime
+        rates", which repeats the attack back to the user. Only runs when suggestions are about to be shown.
+        """
+        if not (settings.HARM_CHECK_ENABLED and result.status == CLARIFY_ASK and result.options):
+            return result
+        if data.get("input") == "A":  # place and period options for a claim, not suggested claims
+            return result
+        screen = await screen_text(self._llm, claim)
+        if screen.harmful or screen.attacks_group:
+            logger.warning(
+                f"Clarifier suggestions withheld: harmful={screen.harmful} attacks_group={screen.attacks_group}"
+            )
+            return _refuse_harmful(result, {"input": CLARIFY_HARMFUL}, language)
+        return result
+
     def _build_plan_messages(
         self, claim: str, language: str, turns: List[Tuple[str, Optional[str]]], allow_ask: bool
     ) -> List[LLMMessage]:
         french = language == "french"
-        skipped = SKIPPED_ANSWER_FR if french else SKIPPED_ANSWER
+        skipped = AnalysisPrompt.CLARIFY_AND_PLAN_SKIPPED_FR if french else AnalysisPrompt.CLARIFY_AND_PLAN_SKIPPED
         lines = [f"Q: {question}\nA: {answer if answer else skipped}" for question, answer in turns]
-        rules = "" if allow_ask else '\nNo more questions are allowed: return status "search".'
+        rules = "" if allow_ask else "\n" + AnalysisPrompt.CLARIFY_AND_PLAN_NO_MORE_QUESTIONS
         if french:
-            rules += "\nThe input is in French: write the question, options, claim and query in French."
-        user = (
-            f"Today is {datetime.now().isoformat()}.\n"
-            f"Input:\n{wrap_untrusted(claim)}\n"
-            f"Previous clarifying questions and the user's answers:\n{wrap_untrusted(chr(10).join(lines) or '(none)')}"
-            f"{rules}"
+            rules += "\n" + AnalysisPrompt.CLARIFY_AND_PLAN_FRENCH
+        user = AnalysisPrompt.CLARIFY_AND_PLAN_INPUT.format(
+            date=datetime.now().isoformat(),
+            claim=wrap_untrusted(claim),
+            turns=wrap_untrusted("\n".join(lines) or "(none)"),
+            rules=rules,
         )
         return [
             LLMMessage(role="system", content=AnalysisPrompt.CLARIFY_AND_PLAN),

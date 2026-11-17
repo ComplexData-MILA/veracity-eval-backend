@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import router
 from app.core.auth.auth0_middleware import Auth0Middleware
 from app.core.config import settings
+from app.core.llm import prompt_overrides
 from app.core.scoring import load_distribution
 from app.services.claim_matching import ClaimVerifier
 
@@ -46,6 +47,8 @@ async def lifespan(app: FastAPI):
     # user_service = await get_user_service_startup()
     app.state.auth_middleware = Auth0Middleware()
     load_distribution(DISTRIBUTION_FILE)
+    if settings.PROMPT_OVERRIDES_PATH:
+        app.state.prompt_overrides = asyncio.create_task(prompt_overrides.watch(settings.PROMPT_OVERRIDES_PATH))
     if (
         settings.semantic_cache_enabled
         and settings.SEMCACHE_NLI_ENABLED

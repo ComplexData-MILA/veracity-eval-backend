@@ -251,6 +251,8 @@ Then re-run this benchmark.
 
 ## Adopted (2026-11-16)
 
+**Update:** the prompt is now V3, not U5. U5 added facts to checked claims and asked many needless questions; see [multiturn-eval.md](multiturn-eval.md). Prompt texts can also be changed without a redeploy: see [prompt-overrides.md](prompt-overrides.md).
+
 U5 is now live behind `USE_COMBINED_MULTI_PROMPT` (default `True`). Setting it to `False` restores the separate `CLARIFY_CLAIM` call and turn 1, unchanged.
 
 - **The call:** `/claims/clarify` makes one JSON-mode call with `AnalysisPrompt.CLARIFY_AND_PLAN`. This is U4's system prompt plus U5's user message.
@@ -264,6 +266,48 @@ No frontend or database change was needed. Tests are in [test_combined_multi_pro
 Not done yet:
 - **Cache first:** the semantic cache is still checked after clarify.
 - **Cache reset:** `params_hash` still covers `ORCHESTRATOR_PROMPT`, which stays in use for later turns, so the existing cache stays valid.
+
+## Round 4: the shipped flow on public benchmarks (2026-11-17)
+
+`SHIPPED` is the code as it now ships: V10 (`CLARIFY_AND_PLAN`), the unnamed-subject rule in code, and the harm screen before every check. It ran on the same 600 claims as Round 3 with dataset evidence, and on the same 150 with live Google search. Questions were skipped, as in Round 3. Three checks hit Vertex 429s and were re-run.
+
+**Accuracy** (acc / macro-F1):
+
+| Dataset | B0 (old flow) | U5 (first combined) | **SHIPPED** |
+|---|---|---|---|
+| FEVER, dataset evidence | 0.635 / 0.487 | 0.625 / 0.487 | 0.625 / 0.488 |
+| FaVIQ, dataset evidence | 0.810 / 0.810 | 0.815 / 0.815 | 0.795 / 0.795 |
+| COVIDFact, dataset evidence | 0.520 / 0.520 | 0.545 / 0.545 | 0.510 / 0.509 |
+| FEVER true/false only, dataset evidence | 0.869 | 0.876 | 0.855 |
+| FEVER, live | 0.640 / 0.463 | 0.680 / 0.527 | 0.700 / 0.513 |
+| FaVIQ, live | 0.640 / 0.640 | 0.740 / 0.739 | 0.740 / 0.739 |
+| COVIDFact, live | 0.600 / 0.597 | 0.480 / 0.480 | 0.660 / 0.653 |
+
+**Paired tests (McNemar).** On dataset evidence, SHIPPED is level with B0 (35 claims right only for B0, 28 only for SHIPPED, p = 0.45). With live search it is ahead (6 vs 17, p = 0.03). That is one test on 150 claims, so read it as "no worse", not as a proven gain.
+
+**Questions and rewrites on benchmark claims** (dataset evidence; ideal is none):
+
+| Dataset | B0 asked / rewritten | U5 asked / rewritten | **SHIPPED asked / rewritten** |
+|---|---|---|---|
+| FEVER | 28% / 16% | 30% / 13% | 9% / 2% |
+| FaVIQ | 32% / 30% | 26% / 24% | 8% / 5% |
+| COVIDFact | 51% / 50% | 34% / 50% | 22% / 16% |
+
+**Time and calls** (p50; dataset evidence, then live):
+
+| | B0 | U5 | **SHIPPED** |
+|---|---|---|---|
+| End to end | 5.41 s / 6.22 s | 4.49 s / 5.13 s | 5.38 s / 6.23 s |
+| Clarify/plan call | 0.65 s | 0.85 s | 0.86 s |
+| Harm screen | none | none | 0.48 s |
+| LLM calls per check (dataset) | 6.44 | 5.19 | 6.21 |
+| Planned first search used | none | | 600 of 600, 150 of 150 |
+| Malformed JSON | 19 of 3,863 calls | 0 | 0 of 3,723 calls |
+| Failed checks | 0 | 0 | 0 |
+
+The harm screen takes back most of the time the combined call saved, so SHIPPED is about as fast as B0 and about 0.9 s slower than U5.
+
+**FEVER "not enough info" is still rarely predicted:** 3 of 55 with dataset evidence and 0 of 14 live, much as with B0 (2 of 55). This comes from the verdict prompt, which the combined prompt doesn't touch. `GET_VERACITY` defines the 0–100 scale but not how to weigh evidence, and it lacks the rule that insufficient evidence is not falsity.
 
 ## Next, if adopted
 
