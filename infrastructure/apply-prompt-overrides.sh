@@ -40,7 +40,8 @@ if [ "$DEPLOY_ENV" = "prod" ] && ! git merge-base --is-ancestor HEAD origin/main
     exit 1
 fi
 
-"${PYTHON:-python}" -m app.core.llm.prompt_overrides check "$FILE"
+# macOS ships python3 only, with no plain `python` command
+"${PYTHON:-python3}" -m app.core.llm.prompt_overrides check "$FILE"
 
 gcloud container clusters get-credentials "$CLUSTER_NAME" --zone "$ZONE"
 kubectl -n "$NAMESPACE" create configmap veracity-prompt-overrides --from-file=prompts.json="$FILE" \
