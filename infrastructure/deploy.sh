@@ -98,7 +98,7 @@ elif [ -z "$(git branch -r --contains HEAD)" ]; then
     echo "ERROR: Commit $IMAGE_TAG has not been pushed to GitHub. Push it before deploying."
     exit 1
 elif [ "$DEPLOY_ENV" = "prod" ] && ! git merge-base --is-ancestor HEAD origin/main; then
-    read -r -p "WARNING: $IMAGE_TAG is not on origin/main. Deploy it anyway? Type 'yes' to continue: " answer
+    read -r -p "WARNING: $IMAGE_TAG is not on origin/main. You will deploy to $DEPLOY_ENV. Deploy to $DEPLOY_ENV anyway? Type 'yes' to continue: " answer
     [ "$answer" = "yes" ] || exit 1
 fi
 
