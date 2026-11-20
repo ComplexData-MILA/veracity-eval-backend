@@ -4,6 +4,7 @@ The prompt follows the extractor-segmentor of CAAFC (arXiv 2605.12436): split on
 intact, and keep each subclaim's context. It runs on a small MaaS model; any failure falls back to the claim itself.
 """
 
+import asyncio
 import json
 import logging
 import time
@@ -57,7 +58,9 @@ async def decompose(claim: str, provider: Optional[LLMProvider] = None) -> List[
     prompt = AnalysisPrompt.DECOMPOSE_CLAIM.format(max_subclaims=max_subclaims, statement=wrap_untrusted(claim))
     started = time.perf_counter()
     try:
-        response = await (provider or _get_provider()).generate_response(
+        # The first build fetches a Google token over the network, so it runs off the event loop
+        provider = provider or await asyncio.to_thread(_get_provider)
+        response = await provider.generate_response(
             [Message(role="user", content=prompt)], temperature=0.0
         )
         subclaims = parse_subclaims(response.text, claim, max_subclaims)
