@@ -3,9 +3,10 @@
 A clarified claim is split into atomic subclaims before the search loop. Each subclaim gets its own search. The search
 results and snippets are cached per subclaim, so a later, different claim that shares a subclaim reuses that evidence.
 
-**Status:** built and evaluated locally, behind `CLAIM_DECOMPOSITION_ENABLED` (off by default). The decomposer is
-`openai/gpt-oss-120b-maas` on the `global` endpoint. Llama 3.1 8B and gpt-oss-20b returned 404 for the project. Not yet
-deployed to dev. See [Results](#results) and [GCP](#gcp-what-to-do).
+**Status:** behind `CLAIM_DECOMPOSITION_ENABLED` (off by default; on in dev). The decomposer is
+`google/gemma-4-26b-a4b-it-maas` on the `global` endpoint. It matched gpt-oss-120b on WiCE and is faster; Llama 3.1
+8B and gpt-oss-20b aren't offered as MaaS to the project. Evaluated locally and on dev. See [Results](#results) and
+[GCP](#gcp-what-to-do).
 
 **Recommendation:**
 - Ship D1 (the in-prompt Algorithm 1 rule) with decomposition on. It gains accuracy for about +0.6 s median.
@@ -108,7 +109,8 @@ Migration `a9d2e4b7c1f3` adds `subclaim_cache_entries`:
 | Env var | Default | Notes |
 |---|---|---|
 | `CLAIM_DECOMPOSITION_ENABLED` | `false` | Turns the whole feature on. `infrastructure/terraform-dev` sets it to `true`. |
-| `DECOMPOSE_MODEL_NAME` / `DECOMPOSE_LOCATION` | `openai/gpt-oss-120b-maas` / `global` | Any Vertex MaaS chat model. gpt-oss is served only on `global`: in `us-central1` it returned empty content. |
+| `DECOMPOSE_MODEL_NAME` / `DECOMPOSE_LOCATION` | `google/gemma-4-26b-a4b-it-maas` / `global` | Any Vertex MaaS chat model. Gemma 4 on MaaS is served only on `global`. |
+| `DECOMPOSE_TIMEOUT_S` | `3.0` | No retries. Past this, the claim is checked whole: both MaaS decomposers sometimes stall for 30–60 s. |
 | `DECOMPOSE_MAX_SUBCLAIMS` | `5` | Upper bound on subclaims, and so on subclaim searches. |
 | `SUBCLAIM_CACHE_ENABLED` | `true` | Applies only when decomposition and the semantic cache are both on. `false` keeps decomposition but searches every subclaim (bench config V4). |
 | `SUBCLAIM_CACHE_MAX_ENTRIES` | `200000` | Size cap. Entries are small: the evidence lives in `sources`. |
@@ -215,15 +217,21 @@ comparisons.
 
 #### (b) Decomposition alone: WiCE test (358 claims)
 
-| Metric | No split (floor) | gpt-oss-120b | WiCE reference |
-|---|---|---|---|
-| Coverage | 1.000 | 0.944 | 0.946 |
-| Faithfulness | 1.000 | 0.984 | 0.977 |
-| Redundancy | 0.000 | 0.008 | 0.006 |
-| Mean subclaims | 1.00 | 2.49 | 2.68 |
-| Count error vs reference | 1.676 | 0.550 | 0 |
-| Unit claims kept whole | 1.000 | 1.000 | 1.000 |
-| Starts with a pronoun | 0.182 | 0.175 | 0.165 |
+| Metric | No split (floor) | gpt-oss-120b | Gemma 4 26B-A4B | WiCE reference |
+|---|---|---|---|---|
+| Coverage | 1.000 | 0.944 | 0.928 | 0.946 |
+| Faithfulness | 1.000 | 0.984 | 0.983 | 0.977 |
+| Redundancy | 0.000 | 0.008 | 0.015 | 0.006 |
+| Mean subclaims | 1.00 | 2.49 | 2.68 | 2.68 |
+| Count error vs reference | 1.676 | 0.550 | 0.559 | 0 |
+| Unit claims kept whole | 1.000 | 1.000 | 1.000 | 1.000 |
+| Starts with a pronoun | 0.182 | 0.175 | 0.132 | 0.165 |
+| Latency p50 / p95 / max | – | 1.23 / 2.83 / 64 s | 0.98 / 2.04 / 27 s | – |
+
+- **Model choice:** gpt-oss-20b is not offered as MaaS on Vertex (open weights only), so the small option is
+  `google/gemma-4-26b-a4b-it-maas` (global endpoint only). Its quality is on par with 120b. It is about 0.25 s faster at
+  p50 and has fewer extreme latencies (5 vs 7 calls over 5 s, max 27 s vs 64 s). Both models have slow outliers, so the
+  decompose call needs a timeout either way.
 
 - **Quality:** the split matches the reference on coverage, faithfulness and redundancy, and splits a little less.
 - **Reliability and speed:** 0 parse failures. Latency p50 1.23 s, p95 2.83 s; WiCE claims are longer than the
@@ -254,7 +262,44 @@ whole-claim cache. The baseline is the same follow-up with the subclaim cache of
 
 #### (d) Deployed latency on dev
 
-Not run: local only for now. The bench configs (V4, V5, the `overlap` scenario) are ready in `tests/bench/`.
+Run on 2026-11-19 against dev (image `3383fc9`, Gemma decomposer set by env, no timeout yet) with
+`tests/bench/dev_stage_eval.py`: 77 UI checks plus two batches, compared with the last dev bench before decomposition
+(`latency_V3.csv`).
+
+| Stage, p50 / p90 s | Before (V3) | Now |
+|---|---|---|
+| clarify | 2.05 / 3.11 | 1.43 / 2.30 |
+| decompose | – | 0.62 / 0.94 |
+| subclaim cache lookup (dev CPU) | – | 0.29 / 1.86 |
+| subclaim searches (concurrent) + save | – | 0.41 + 0.32 |
+| search loop (planner and its searches) | 5.52 / 10.13 | 3.75 / 14.33 |
+| verdict | 1.02 / 1.35 | 1.03 / 1.26 |
+| stream total, fresh claims | 7.60 / 12.02 | 8.17 / 18.14 (paired median −0.86 s, n=19) |
+| stream total, same claims repeated | 1.43 / 9.61 (claim replay) | 7.08 / 12.43 (fresh verdict, by design) |
+
+- **The p90 comes from the planner.** 2 of 80 checks ran the planner to its 10-search limit (14–16 s in the loop).
+  Google CSE also returned 502 on 13 of about 190 searches; the planner then works with fewer sources.
+- **Subclaim cache:** 6/6 shared facts reused; 0 wrong reuses. All 14 NLI candidates from near misses were rejected
+  (entailment ≤ 0.48); the near misses' other, unchanged fact was reused by exact match, as intended.
+- **Batch:** the repeat batch was served from the whole-claim exact cache, 0.75–1.24 s per claim (4.4–8.6 s fresh),
+  about 0.6 s of it the harm check.
+- **Claim types:** 16/19 correct on scored claims.
+  - Both compound claims with one false part ("three Nobel Prizes", "reunified in 1991") were labelled
+    contradicted in the analysis but scored 40, not ≤ 20 as `SUBCLAIM_VERDICT_RULES` asks: the verdict model doesn't
+    always follow the score rule. Mapping per-subclaim labels to the score in code (D2) would enforce it.
+  - The third miss was a wrong gold label (the Nvidia story below).
+- **The user's claims:**
+  - The two immigration phrasings scored 0.4 and 0.3 and correctly shared nothing: "root cause" and "currently" make
+    the second a different claim.
+  - The two Nvidia phrasings scored 0.86 and 0.0 on the same allegation. The sources (NYT, Reuters, PBS, 6–12 Nov
+    2026) report it. The second phrasing's planner search returned no sources, and the verdict read the 2026 report
+    dates as the date of the affair and called "in 2024" false. That is a verdict and evidence problem, not a cache
+    one.
+- **Bugs found:**
+  - `POST /claims/batch/results` returned 500 when a claim had no `batch_user_id` / `batch_post_id`; the response
+    schema now allows both to be absent, as the request already does.
+  - The Google load balancer returned 2 intermittent 502s, which is uvicorn's 5 s keep-alive being shorter than the
+    load balancer's 600 s. `docker-entrypoint.sh` now sets `--timeout-keep-alive 620`.
 
 #### Other findings
 
@@ -264,6 +309,10 @@ Not run: local only for now. The bench configs (V4, V5, the `overlap` scenario) 
   test.
 - **Unterminated verdict JSON.** About 5–10% of verdicts are cut off, at the same rate in B0. The regex fallback still
   recovers the score.
+- **LLM calls blocked the event loop.** The Vertex provider used the synchronous OpenAI client inside async code, and
+  every check built two providers, each fetching a Google token synchronously. Calls now run on a thread pool, the
+  stream included, and the process shares one provider (`vertex_ai_llama.py`, `dependencies.py`), with a test that the
+  loop keeps running during slow calls.
 
 ### How close this is to CAAFC
 
@@ -274,7 +323,7 @@ Not run: local only for now. The bench configs (V4, V5, the `overlap` scenario) 
 - **Different:**
   - CAAFC retrieves primary sources with dated, chronological Google AI Mode queries (Fig. 5); we use our Google
     search;
-  - CAAFC uses a quantized Gemma3-27B; we use gpt-oss-120b;
+  - CAAFC uses a quantized Gemma3-27B; we use Gemma 4 26B-A4B on Vertex MaaS;
   - we have no actionability justifier or revision loop.
 - **Datasets:** CAAFC evaluates end to end on AVeriTeC, CoverBench, FACTors, DiaHalu and HaluEval, with no standalone
   decomposition eval. WiCE is used here because it has reference subclaims. Factcheck-Bench, FActScore and ClaimDecomp
@@ -282,8 +331,8 @@ Not run: local only for now. The bench configs (V4, V5, the `overlap` scenario) 
 
 ## GCP: what to do
 
-1. **Decomposer model:** `openai/gpt-oss-120b-maas` is already enabled for project `misinformation-mitigation` and
-   answers on the `global` endpoint. The pod's service account already calls Vertex MaaS.
+1. **Decomposer model:** `google/gemma-4-26b-a4b-it-maas` is already enabled for project `misinformation-mitigation`
+   and answers on the `global` endpoint. The pod's service account already calls Vertex MaaS.
 2. **Deploy to dev:** `DEPLOY_ENV=dev ./infrastructure/deploy.sh`. Migration `a9d2e4b7c1f3` runs on pod start and needs
    pgvector, which is already installed for the claim cache.
 3. **Flags:** dev deploys with `CLAIM_DECOMPOSITION_ENABLED=true` (terraform-dev). The decomposition bench toggles

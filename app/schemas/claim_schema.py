@@ -62,8 +62,8 @@ class WordCloudRequest(BaseModel):
 class SuccessResult(BaseModel):
     claim_id: UUID
     analysis_id: UUID
-    batch_user_id: str
-    batch_post_id: str
+    batch_user_id: Optional[str] = None  # optional in the batch request too
+    batch_post_id: Optional[str] = None
     veracity_score: float
     average_source_credibility: float
     num_sources: int
@@ -71,8 +71,8 @@ class SuccessResult(BaseModel):
 
 class FailureResult(BaseModel):
     claim_id: UUID
-    batch_user_id: str
-    batch_post_id: str
+    batch_user_id: Optional[str] = None  # optional in the batch request too
+    batch_post_id: Optional[str] = None
     status: str
     message: str
 

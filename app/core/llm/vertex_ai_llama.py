@@ -3,6 +3,8 @@ import base64
 import json
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from typing import AsyncGenerator, List
 from datetime import UTC, datetime
 import openai
@@ -13,6 +15,14 @@ from app.core.llm.interfaces import LLMProvider
 from app.core.llm.messages import Message, Response, ResponseChunk
 
 logger = logging.getLogger(__name__)
+
+# The OpenAI client is synchronous, so its calls run on these threads instead of stalling the event loop for every
+# request. Not AsyncOpenAI: its connections are tied to one event loop, and the eval harnesses reuse providers across loops.
+_LLM_THREADS = ThreadPoolExecutor(max_workers=64, thread_name_prefix="llm")
+
+
+async def _in_thread(fn, *args, **kwargs):
+    return await asyncio.get_running_loop().run_in_executor(_LLM_THREADS, partial(fn, *args, **kwargs))
 
 
 class VertexAILlamaProvider(LLMProvider):
@@ -118,7 +128,8 @@ class VertexAILlamaProvider(LLMProvider):
             # Vertex's safety filter intermittently blocks Llama 4 replies (finish_reason "content_filter",
             # content None) on sensitive but legitimate claims; a resample usually passes.
             for _ in range(3):
-                response = self.client.chat.completions.create(
+                response = await _in_thread(
+                    self.client.chat.completions.create,
                     model=self.model_id,
                     messages=[{"role": m.role, "content": m.content} for m in messages],
                     temperature=temperature,
@@ -154,7 +165,8 @@ class VertexAILlamaProvider(LLMProvider):
             logger.debug("Starting stream generation")
             logger.debug(f"Messages: {messages}")
 
-            response = self.client.chat.completions.create(
+            response = await _in_thread(
+                self.client.chat.completions.create,
                 model=self.model_id,
                 messages=[{"role": m.role, "content": m.content} for m in messages],
                 temperature=temperature,
@@ -164,7 +176,9 @@ class VertexAILlamaProvider(LLMProvider):
             )
 
             finish_reason = None
-            for chunk in response:
+            chunks = iter(response)
+            # Each read waits on the network, so it runs on a thread too
+            while (chunk := await _in_thread(next, chunks, None)) is not None:
                 if chunk.choices and chunk.choices[0].finish_reason:
                     finish_reason = chunk.choices[0].finish_reason
                 if chunk.choices and chunk.choices[0].delta.content:

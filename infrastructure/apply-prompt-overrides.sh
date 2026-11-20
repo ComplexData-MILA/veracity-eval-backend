@@ -40,8 +40,19 @@ if [ "$DEPLOY_ENV" = "prod" ] && ! git merge-base --is-ancestor HEAD origin/main
     exit 1
 fi
 
-# macOS ships python3 only, with no plain `python` command
-"${PYTHON:-python3}" -m app.core.llm.prompt_overrides check "$FILE"
+# The check needs only the standard library. Use PYTHON if set, else the first launcher that runs: macOS has only
+# python3, and on Windows python3 may be a stub that opens the Store, leaving python or py.
+PY="${PYTHON:-}"
+if [ -z "$PY" ]; then
+    for candidate in python3 python py; do
+        if "$candidate" -c "" > /dev/null 2>&1; then PY="$candidate"; break; fi
+    done
+fi
+if [ -z "$PY" ]; then
+    echo "ERROR: Python not found. Install it, or set PYTHON=/path/to/python."
+    exit 1
+fi
+"$PY" -m app.core.llm.prompt_overrides check "$FILE"
 
 gcloud container clusters get-credentials "$CLUSTER_NAME" --zone "$ZONE"
 kubectl -n "$NAMESPACE" create configmap veracity-prompt-overrides --from-file=prompts.json="$FILE" \

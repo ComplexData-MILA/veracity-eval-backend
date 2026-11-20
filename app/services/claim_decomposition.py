@@ -30,6 +30,8 @@ def _get_provider() -> LLMProvider:
         _provider = VertexAILlamaProvider(
             settings, model_id=settings.DECOMPOSE_MODEL_NAME, location=settings.DECOMPOSE_LOCATION
         )
+        # The client is synchronous, so the limit has to be on the HTTP call; no retries, the fallback is cheap
+        _provider.client = _provider.client.with_options(timeout=settings.DECOMPOSE_TIMEOUT_S, max_retries=0)
     return _provider
 
 

@@ -91,9 +91,12 @@ class Settings(BaseSettings):
 
     # Atomic claim decomposition before the search loop (CAAFC, arXiv 2605.12436), on a small MaaS model
     CLAIM_DECOMPOSITION_ENABLED: bool = False
-    DECOMPOSE_MODEL_NAME: str = "openai/gpt-oss-120b-maas"
-    # gpt-oss on Vertex MaaS is served only through the global endpoint
+    # gpt-oss-20b is not offered as MaaS; Gemma 4 matched gpt-oss-120b on WiCE and is faster (docs/claim-decomposition.md)
+    DECOMPOSE_MODEL_NAME: str = "google/gemma-4-26b-a4b-it-maas"
+    # Gemma 4 on Vertex MaaS is served only through the global endpoint
     DECOMPOSE_LOCATION: str = "global"
+    # Both MaaS decomposers occasionally stall for 30-60 s; past this, the claim is checked whole
+    DECOMPOSE_TIMEOUT_S: float = 3.0
     DECOMPOSE_MAX_SUBCLAIMS: int = 5
     # Reuse a cached subclaim's search results for a different claim; needs decomposition and the semantic cache on
     SUBCLAIM_CACHE_ENABLED: bool = True

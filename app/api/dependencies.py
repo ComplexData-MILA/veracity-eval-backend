@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -184,10 +185,16 @@ async def get_feedback_service(
     return FeedbackService(feedback_repository, analysis_repository)
 
 
+_llm_provider = None
+
+
 async def get_llm_provider():
+    # One per process: building one fetches a Google token over the network; it refreshes the token itself after that
+    global _llm_provider
     try:
-        provider = VertexAILlamaProvider(settings)
-        return provider
+        if _llm_provider is None:
+            _llm_provider = await asyncio.to_thread(VertexAILlamaProvider, settings)
+        return _llm_provider
     except Exception as e:
         logger.error(f"Failed to initialize LLM provider: {str(e)}", exc_info=True)
         raise
@@ -248,8 +255,6 @@ async def get_orchestrator_service(
     llm_provider=Depends(get_llm_provider),
     semantic_cache: SemanticCacheService = Depends(get_semantic_cache_service),
 ) -> AnalysisOrchestrator:
-    llm_provider = VertexAILlamaProvider(settings)
-
     return AnalysisOrchestrator(
         claim_repo=claim_repository,
         analysis_repo=analysis_repository,
@@ -315,8 +320,6 @@ async def get_serper_orchestrator_service(
     llm_provider=Depends(get_llm_provider),
     semantic_cache: SemanticCacheService = Depends(get_semantic_cache_service),
 ) -> AnalysisOrchestrator:
-    llm_provider = VertexAILlamaProvider(settings)
-
     return AnalysisOrchestrator(
         claim_repo=claim_repository,
         analysis_repo=analysis_repository,
